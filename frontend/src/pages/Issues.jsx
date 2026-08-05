@@ -10,9 +10,7 @@ import {
   MoreVertical,
   GitBranch,
   User,
-  Calendar,
-  ArrowUp,
-  ArrowDown
+  Calendar
 } from 'lucide-react'
 
 const issues = [

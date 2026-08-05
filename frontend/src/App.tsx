@@ -13,7 +13,7 @@ import Settings from './pages/Settings'
 import Profile from './pages/Profile'
 import MainLayout from './components/MainLayout'
 
-function App() {
+export default function App() {
   return (
     <BrowserRouter>
       <Routes>
@@ -33,5 +33,3 @@ function App() {
     </BrowserRouter>
   )
 }
-
-export default App

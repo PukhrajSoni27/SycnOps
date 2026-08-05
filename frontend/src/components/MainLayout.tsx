@@ -1,4 +1,5 @@
-import { Outlet, Link, useLocation } from 'react-router-dom'
+import React, { useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { 
   LayoutDashboard, 
   GitBranch, 
@@ -9,13 +10,18 @@ import {
   Bell, 
   Settings, 
   User,
-  LogOut,
   Menu,
-  X
+  X,
+  LucideIcon
 } from 'lucide-react'
-import { useState } from 'react'
 
-const navigation = [
+interface NavItem {
+  name: string
+  href: string
+  icon: LucideIcon
+}
+
+const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Repositories', href: '/repositories', icon: GitBranch },
   { name: 'Pull Requests', href: '/pull-requests', icon: GitPullRequest },
@@ -27,7 +33,11 @@ const navigation = [
   { name: 'Profile', href: '/profile', icon: User },
 ]
 
-export default function MainLayout() {
+interface MainLayoutProps {
+  children: React.ReactNode
+}
+
+export default function MainLayout({ children }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const location = useLocation()
 
@@ -67,7 +77,7 @@ export default function MainLayout() {
       </div>
 
       {/* Desktop sidebar */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:w-64 lg:bg-white lg:shadow-lg">
+      <div className="hidden lg:block lg:fixed lg:inset-y-0 lg:w-64 lg:bg-white lg:shadow-lg">
         <div className="flex items-center gap-2 p-6 border-b">
           <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
             <Bot className="w-5 h-5 text-white" />
@@ -132,7 +142,7 @@ export default function MainLayout() {
 
         {/* Page content */}
         <main className="p-4 lg:p-8">
-          <Outlet />
+          {children}
         </main>
       </div>
     </div>

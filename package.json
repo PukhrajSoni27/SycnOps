@@ -1,0 +1,21 @@
+{
+  "name": "sycnops-ai-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SycnOps AI - Developer Workflow Automation Platform",
+  "scripts": {
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev": "npm run dev:frontend",
+    "build": "npm run build --prefix frontend",
+    "lint": "npm run lint --prefix frontend"
+  },
+  "keywords": [
+    "developer-workflow",
+    "ai-automation",
+    "github-integration",
+    "analytics"
+  ],
+  "author": "",
+  "license": "MIT"
+}
