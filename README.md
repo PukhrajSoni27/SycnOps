@@ -57,7 +57,6 @@ SycnOps/
 │   ├── package.json
 │   └── .env.example
 ├── docker/                     # Docker configuration
-│   ├── Dockerfile.frontend     # Frontend container spec
 │   ├── Dockerfile.backend      # Backend container spec
 │   └── docker-compose.yml      # Multi-service stack
 ├── docker-compose.yml          # Root docker compose setup

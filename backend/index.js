@@ -1,14 +1,38 @@
+import path from 'path'
+import { fileURLToPath } from 'url'
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
+import connectDB from './config/db.js'
+import authRoutes from './routes/authRoutes.js'
 
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+dotenv.config({ path: path.join(__dirname, 'backend.env') })
 dotenv.config()
+
+// Prevent uncaught errors from crashing the backend process
+process.on('uncaughtException', (err) => {
+  console.error('⚠️ Uncaught Exception:', err.message)
+})
+process.on('unhandledRejection', (reason) => {
+  console.error('⚠️ Unhandled Rejection:', reason)
+})
+
+// Connect to MongoDB Atlas
+connectDB()
 
 const app = express()
 const PORT = process.env.PORT || 5000
 
 app.use(cors())
 app.use(express.json())
+
+// Root API endpoint
+app.get('/', (req, res) => {
+  res.send('SycnOps AI Backend is running')
+})
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -88,19 +112,18 @@ app.post('/api/ai-assistant', (req, res) => {
   })
 })
 
-// Auth Endpoints
-app.post('/api/auth/login', (req, res) => {
-  const { email, password } = req.body
-  if (!email || !password) {
-    return res.status(400).json({ success: false, message: 'Email and password are required.' })
-  }
-  res.json({
-    success: true,
-    token: 'mock-jwt-token-sycnops-ai',
-    user: { id: 1, name: 'John Doe', email, role: 'Developer' }
-  })
-})
+// User Authentication Endpoints (MongoDB backed)
+app.use('/api/auth', authRoutes)
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 SycnOps AI Backend running on http://localhost:${PORT}`)
 })
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.warn(`⚠️ Port ${PORT} is already in use by another instance.`)
+  } else {
+    console.error('⚠️ Server error:', err.message)
+  }
+})
+
