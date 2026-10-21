@@ -22,13 +22,14 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: [true, 'Please provide a password'],
+      required: function () {
+        return this.authProvider === 'local'
+      },
       minlength: [6, 'Password must be at least 6 characters']
     },
     role: {
       type: String,
-      enum: ['Developer', 'Architect', 'Admin', 'Viewer'],
-      default: 'Developer'
+      default: 'developer'
     },
     avatar: {
       type: String,

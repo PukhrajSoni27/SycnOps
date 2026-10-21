@@ -1,22 +1,20 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { 
-  ArrowRight, 
-  Check, 
-  Code, 
-  Command, 
-  Shield, 
-  Sparkles, 
-  Zap, 
+import {
+  ArrowRight,
+  Check,
+  Command,
+  Shield,
+  Sparkles,
+  Zap,
   Activity,
   Menu,
   X,
   GitBranch,
-  Terminal as TerminalIcon,
   Cpu
 } from 'lucide-react'
 
-// Optimized 60 FPS Canvas Electric Plasma Component
+// Background canvas
 function PlasmaCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -51,7 +49,7 @@ function PlasmaCanvas() {
       time += 0.014
       ctx.clearRect(0, 0, width, height)
 
-      // Soft background glow
+
       const grad = ctx.createRadialGradient(width * 0.7, height * 0.45, 30, width * 0.7, height * 0.45, width * 0.6)
       grad.addColorStop(0, 'rgba(16, 185, 129, 0.18)')
       grad.addColorStop(0.5, 'rgba(6, 182, 212, 0.08)')
@@ -59,7 +57,7 @@ function PlasmaCanvas() {
       ctx.fillStyle = grad
       ctx.fillRect(0, 0, width, height)
 
-      // Fast, lightweight plasma tendrils (60 FPS optimized, no expensive shadowBlur)
+
       const tendrils = 4
       for (let t = 0; t < tendrils; t++) {
         ctx.beginPath()
@@ -85,7 +83,7 @@ function PlasmaCanvas() {
         ctx.stroke()
       }
 
-      // Fast floating sparks
+
       for (let p = 0; p < 20; p++) {
         const px = (width * 0.35) + (Math.sin(p * 7 + time * 1.4) * 0.5 + 0.5) * (width * 0.6)
         const py = (Math.cos(p * 5 + time * 0.9) * 0.5 + 0.5) * height
@@ -125,7 +123,7 @@ function PlasmaCanvas() {
 export default function Landing() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-  // Asynchronous IntersectionObserver for silky 60 FPS scroll animations
+  // Scroll reveal observer
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -241,7 +239,7 @@ export default function Landing() {
       {/* Hero Section */}
       <section style={{ position: 'relative', zIndex: 10, paddingTop: '140px', paddingBottom: '80px', paddingLeft: 'var(--pad-x)', paddingRight: 'var(--pad-x)', minHeight: '92vh', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
         <div style={{ maxWidth: 'var(--max-w)', margin: '0 auto', width: '100%', display: 'grid', gridTemplateColumns: 'minmax(0, 1.15fr) minmax(0, 0.85fr)', gap: '48px', alignItems: 'center' }}>
-          
+
           {/* Left Column Content */}
           <div>
             {/* Tag / Category */}
@@ -287,7 +285,7 @@ export default function Landing() {
           {/* Right Column Visual (IDE Window + Floating Badges) */}
           <div className="reveal-block" style={{ '--reveal-delay': '0.2s' } as any}>
             <div className="s-ide-container">
-              
+
               {/* Floating Badge Top Right: STATUS Active */}
               <div className="s-floating-badge" style={{ top: '-18px', right: '-12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -478,7 +476,7 @@ export default function Landing() {
                 )}
                 <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '24px', color: '#ffffff', marginBottom: '8px' }}>{tier.name}</h3>
                 <p style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', color: 'rgba(255,255,255,0.5)', marginBottom: '24px', minHeight: '38px' }}>{tier.desc}</p>
-                
+
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', marginBottom: '32px' }}>
                   <span style={{ fontFamily: 'var(--font-serif)', fontSize: '42px', fontWeight: 300, color: '#ffffff' }}>{tier.price}</span>
                   <span style={{ fontFamily: 'var(--font-tech)', fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>{tier.period}</span>

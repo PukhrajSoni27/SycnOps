@@ -10,23 +10,7 @@
     "build": "npm run build --prefix frontend",
     "lint": "npm run lint --prefix frontend"
   },
-  "keywords": [
-    "developer-workflow",
-    "ai-automation",
-    "github-integration",
-    "analytics"
-  ],
-  "author": "",
   "license": "MIT",
-  "dependencies": {
-    "@tailwindcss/postcss": "^4.3.3",
-    "autoprefixer": "^10.5.4",
-    "firebase": "^12.17.1",
-    "mongodb": "^7.5.0",
-    "next-auth": "^5.0.0-beta.32",
-    "postcss": "^8.5.25",
-    "tailwindcss": "^4.3.3"
-  },
   "devDependencies": {
     "concurrently": "^10.0.4"
   }

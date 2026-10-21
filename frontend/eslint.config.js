@@ -33,11 +33,42 @@ export default [
         alert: 'readonly',
         confirm: 'readonly',
         prompt: 'readonly',
+        // HTML Element types
         HTMLInputElement: 'readonly',
         HTMLButtonElement: 'readonly',
         HTMLDivElement: 'readonly',
         HTMLParagraphElement: 'readonly',
-        HTMLHeadingElement: 'readonly'
+        HTMLHeadingElement: 'readonly',
+        HTMLCanvasElement: 'readonly',
+        HTMLElement: 'readonly',
+        // Browser animation & observer APIs
+        requestAnimationFrame: 'readonly',
+        cancelAnimationFrame: 'readonly',
+        ResizeObserver: 'readonly',
+        IntersectionObserver: 'readonly',
+        performance: 'readonly',
+        // Browser built-in types
+        Event: 'readonly',
+        MouseEvent: 'readonly',
+        Notification: 'readonly',
+        Response: 'readonly',
+        URL: 'readonly',
+        URLSearchParams: 'readonly',
+        FormData: 'readonly',
+        Headers: 'readonly',
+        Request: 'readonly',
+        AbortController: 'readonly',
+        AbortSignal: 'readonly',
+        Promise: 'readonly',
+        JSON: 'readonly',
+        Math: 'readonly',
+        Date: 'readonly',
+        parseInt: 'readonly',
+        parseFloat: 'readonly',
+        isNaN: 'readonly',
+        isFinite: 'readonly',
+        encodeURIComponent: 'readonly',
+        decodeURIComponent: 'readonly'
       }
     },
     plugins: {
@@ -52,6 +83,8 @@ export default [
       'react/react-in-jsx-scope': 'off',
       'react/prop-types': 'off',
       'no-unused-vars': 'off',
+      // Allow empty catch blocks — used intentionally for silent error fallbacks
+      'no-empty': ['error', { allowEmptyCatch: true }],
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }]
     }
   }

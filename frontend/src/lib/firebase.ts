@@ -1,77 +1,54 @@
-import { initializeApp } from 'firebase/app'
-import { getAuth, GoogleAuthProvider, GithubAuthProvider } from 'firebase/auth'
-import { getMessaging, getToken, onMessage, isSupported } from 'firebase/messaging'
+/**
+ * Firebase Client SDK initialization for SycnOps frontend.
+ * Reads configuration from VITE_ environment variables.
+ *
+ * Firebase project: sycnops-cd9af
+ */
+import { initializeApp, getApps, type FirebaseApp } from 'firebase/app'
+import {
+  getAuth,
+  GoogleAuthProvider,
+  GithubAuthProvider,
+  type Auth
+} from 'firebase/auth'
+import { getFirestore, type Firestore } from 'firebase/firestore'
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDummyKeyForDevelopmentPurposesOnly",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "localhost",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "dummy-project",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "dummy.appspot.com",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "1234567890",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:1234567890:web:abc123def456",
-  vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY || "BC_dummy_vapid_key_for_notifications"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 }
 
-const app = initializeApp(firebaseConfig)
-
-export const auth = getAuth(app)
-export const googleProvider = new GoogleAuthProvider()
-export const githubProvider = new GithubAuthProvider()
-
-// Safe Firebase Messaging Initialization
-let messagingInstance: any = null
-
-export const getFirebaseMessaging = async () => {
-  if (messagingInstance) return messagingInstance
-  try {
-    const supported = await isSupported()
-    if (supported) {
-      messagingInstance = getMessaging(app)
-      return messagingInstance
-    }
-  } catch (err) {
-    console.warn('Firebase Messaging not supported in current environment:', err)
-  }
-  return null
+export function isFirebaseConfigured(): boolean {
+  return !!(
+    firebaseConfig.apiKey &&
+    firebaseConfig.projectId &&
+    firebaseConfig.appId
+  )
 }
 
-// Request Notification Permission and FCM token
-export const requestNotificationPermission = async () => {
-  try {
-    if (!('Notification' in window)) {
-      return { success: false, message: 'Browser does not support notifications.' }
-    }
+let _app: FirebaseApp | null = null
+let _auth: Auth | null = null
+let _db: Firestore | null = null
 
-    const permission = await Notification.requestPermission()
-    if (permission === 'granted') {
-      const msg = await getFirebaseMessaging()
-      if (msg) {
-        try {
-          const token = await getToken(msg, { vapidKey: firebaseConfig.vapidKey })
-          if (token) {
-            localStorage.setItem('fcm_token', token)
-            return { success: true, token, message: 'Push notifications enabled successfully!' }
-          }
-        } catch (tokenErr) {
-          console.warn('FCM token fetch warning:', tokenErr)
-        }
-      }
-      return { success: true, message: 'Notification permission granted!' }
-    } else {
-      return { success: false, message: 'Notification permission denied.' }
-    }
-  } catch (err: any) {
-    return { success: false, message: err.message || 'Error requesting notification permission.' }
-  }
+if (isFirebaseConfigured()) {
+  // Avoid duplicate initialization in hot-reload environments
+  _app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig)
+  _auth = getAuth(_app)
+  _db = getFirestore(_app)
+  console.log(`🔥 Firebase connected to project: ${firebaseConfig.projectId}`)
+} else {
+  console.warn(
+    '⚠️ Firebase not configured. Add VITE_FIREBASE_* variables to frontend/.env'
+  )
 }
 
-// Listen to foreground FCM messages
-export const onForegroundNotification = async (callback: (payload: any) => void) => {
-  const msg = await getFirebaseMessaging()
-  if (msg) {
-    onMessage(msg, (payload) => {
-      callback(payload)
-    })
-  }
-}
-
+export const app = _app
+export const auth = _auth
+export const firestore = _db
+export const googleProvider = _auth ? new GoogleAuthProvider() : null
+export const githubProvider = _auth ? new GithubAuthProvider() : null

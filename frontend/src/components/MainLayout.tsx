@@ -13,9 +13,6 @@ const navigation: NavItem[] = [
   { name: 'Pull Requests', href: '/pull-requests' },
   { name: 'Issues', href: '/issues' },
   { name: 'Analytics', href: '/analytics' },
-  { name: 'AI Assistant', href: '/ai-assistant' },
-  { name: 'Notifications', href: '/notifications' },
-  { name: 'Settings', href: '/settings' },
   { name: 'Profile', href: '/profile' },
 ]
 
@@ -27,7 +24,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const location = useLocation()
 
-  // Read user name from localStorage
+
   const getUserDisplayName = (): string => {
     try {
       const stored = localStorage.getItem('sycnops_user')
@@ -35,8 +32,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         const user = JSON.parse(stored)
         if (user.name && user.name.trim()) {
           return user.name.trim().toUpperCase()
-        }
-        // Fallback: extract alphabetic part from email
+      }
         if (user.email) {
           const local = user.email.split('@')[0]
           return local.replace(/[^a-zA-Z]/g, ' ').trim().toUpperCase() || 'USER'
@@ -48,18 +44,14 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
   const [displayName, setDisplayName] = useState(getUserDisplayName)
 
-  // Listen for user data changes (e.g. after login, profile update)
+  
   useEffect(() => {
     const handleStorageUpdate = () => {
       setDisplayName(getUserDisplayName())
     }
 
-    // Listen for custom event dispatched when user data changes
-    window.addEventListener('sycnops_user_updated', handleStorageUpdate)
-    // Also listen for storage events from other tabs
-    window.addEventListener('storage', handleStorageUpdate)
-
-    // Re-read on every route change (in case login just happened)
+  window.addEventListener('sycnops_user_updated', handleStorageUpdate)
+   window.addEventListener('storage', handleStorageUpdate)
     setDisplayName(getUserDisplayName())
 
     return () => {

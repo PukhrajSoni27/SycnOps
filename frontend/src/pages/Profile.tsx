@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { User, fetchUserProfile, updateUserProfile } from '../services/api'
-import { LogOut, Edit2, Check, X, Shield, Cpu } from 'lucide-react'
+import { LogOut, Edit2 } from 'lucide-react'
 
 export default function Profile() {
   const [user, setUser] = useState<User | undefined>(undefined)

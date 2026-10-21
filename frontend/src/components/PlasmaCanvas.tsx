@@ -45,7 +45,7 @@ export default function PlasmaCanvas({
       time += 0.018 * speed
       ctx.clearRect(0, 0, width, height)
 
-      // 1. Multi-layered Ambient Plasma Orbs / Glowing Radial Gradients
+      // Gradient background
       const cx1 = width * 0.5 + Math.sin(time * 0.7) * (width * 0.25)
       const cy1 = height * 0.4 + Math.cos(time * 0.8) * (height * 0.25)
 
@@ -68,7 +68,7 @@ export default function PlasmaCanvas({
       ctx.fillStyle = grad2
       ctx.fillRect(0, 0, width, height)
 
-      // 2. Electric Plasma Tendrils
+      // Tendrils
       const tendrils = 6
       for (let t = 0; t < tendrils; t++) {
         ctx.beginPath()
@@ -94,7 +94,7 @@ export default function PlasmaCanvas({
         ctx.stroke()
       }
 
-      // 3. Floating Bioluminescent Sparks / Plasma Motes
+      // Floating sparks
       const sparkCount = 28
       for (let p = 0; p < sparkCount; p++) {
         const px = (Math.sin(p * 9 + time * 1.2) * 0.45 + 0.5) * width

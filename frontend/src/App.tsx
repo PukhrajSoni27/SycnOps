@@ -4,15 +4,22 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import Repositories from './pages/Repositories'
+import RepoDetail from './pages/RepoDetail'
+import RepoAnalysis from './pages/RepoAnalysis'
 import PullRequests from './pages/PullRequests'
 import Issues from './pages/Issues'
 import Analytics from './pages/Analytics'
-import AIAssistant from './pages/AIAssistant'
-import Notifications from './pages/Notifications'
-import Settings from './pages/Settings'
 import Profile from './pages/Profile'
-import AuthCallback from './pages/AuthCallback'
 import MainLayout from './components/MainLayout'
+import ProtectedRoute from './components/ProtectedRoute'
+
+function Guard({ children }: { children: React.ReactNode }) {
+  return (
+    <ProtectedRoute>
+      <MainLayout>{children}</MainLayout>
+    </ProtectedRoute>
+  )
+}
 
 export default function App() {
   return (
@@ -21,19 +28,15 @@ export default function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/auth/callback" element={<AuthCallback />} />
-        <Route path="/auth/google/callback" element={<AuthCallback />} />
-        <Route path="/dashboard" element={<MainLayout><Dashboard /></MainLayout>} />
-        <Route path="/repositories" element={<MainLayout><Repositories /></MainLayout>} />
-        <Route path="/pull-requests" element={<MainLayout><PullRequests /></MainLayout>} />
-        <Route path="/issues" element={<MainLayout><Issues /></MainLayout>} />
-        <Route path="/analytics" element={<MainLayout><Analytics /></MainLayout>} />
-        <Route path="/ai-assistant" element={<MainLayout><AIAssistant /></MainLayout>} />
-        <Route path="/notifications" element={<MainLayout><Notifications /></MainLayout>} />
-        <Route path="/settings" element={<MainLayout><Settings /></MainLayout>} />
-        <Route path="/profile" element={<MainLayout><Profile /></MainLayout>} />
+        <Route path="/dashboard" element={<Guard><Dashboard /></Guard>} />
+        <Route path="/repositories" element={<Guard><Repositories /></Guard>} />
+        <Route path="/repositories/:repoId" element={<Guard><RepoDetail /></Guard>} />
+        <Route path="/repositories/:repoId/analysis" element={<Guard><RepoAnalysis /></Guard>} />
+        <Route path="/pull-requests" element={<Guard><PullRequests /></Guard>} />
+        <Route path="/issues" element={<Guard><Issues /></Guard>} />
+        <Route path="/analytics" element={<Guard><Analytics /></Guard>} />
+        <Route path="/profile" element={<Guard><Profile /></Guard>} />
       </Routes>
     </BrowserRouter>
   )
 }
-

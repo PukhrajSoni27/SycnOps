@@ -103,7 +103,7 @@ export default function NeuronCanvas() {
       time += 0.02
       ctx.clearRect(0, 0, width, height)
 
-      // 1. Update node positions
+      // Update node positions
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]
         node.x += node.vx
@@ -113,7 +113,7 @@ export default function NeuronCanvas() {
         if (node.y < 0 || node.y > height) node.vy *= -1
       }
 
-      // 2. Draw connections (Synapses)
+      // Draw connections
       const maxDistance = 135
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
@@ -127,13 +127,13 @@ export default function NeuronCanvas() {
             ctx.strokeStyle = `rgba(16, 185, 129, ${alpha})`
             ctx.lineWidth = 1
             ctx.moveTo(nodes[i].x, nodes[i].y)
-            ctx.lineTo(nodes[j].y, nodes[j].y)
+            ctx.lineTo(nodes[j].x, nodes[j].y)
             ctx.stroke()
           }
         }
       }
 
-      // 3. Update & Draw Pulses (Action Potentials)
+      // Update & draw pulses
       for (let p = pulses.length - 1; p >= 0; p--) {
         const pulse = pulses[p]
         pulse.progress += pulse.speed
@@ -159,19 +159,17 @@ export default function NeuronCanvas() {
         ctx.shadowBlur = 0
       }
 
-      // 4. Draw Neuron Nodes (Somas)
+      // Draw nodes
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]
         const pulseRadius = node.radius + Math.sin(time * 2 + node.pulsePhase) * 0.6
 
-        // Outer glow
-        ctx.beginPath()
+      ctx.beginPath()
         ctx.fillStyle = `${node.color}0.25)`
         ctx.arc(node.x, node.y, pulseRadius * 2.5, 0, Math.PI * 2)
         ctx.fill()
 
-        // Core dot
-        ctx.beginPath()
+      ctx.beginPath()
         ctx.fillStyle = `${node.color}0.9)`
         ctx.arc(node.x, node.y, pulseRadius, 0, Math.PI * 2)
         ctx.fill()
@@ -204,3 +202,8 @@ export default function NeuronCanvas() {
     />
   )
 }
+
+
+
+
+
