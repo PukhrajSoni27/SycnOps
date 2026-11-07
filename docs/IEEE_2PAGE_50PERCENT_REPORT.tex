@@ -1,0 +1,148 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+% ── Core Packages ─────────────────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{cite}
+\usepackage{url}
+\usepackage{xcolor}
+\usepackage{balance}
+
+\begin{document}
+
+\title{SycnOps AI: Autonomous Repository Telemetry Ingestion and Algorithmic Health Evaluation\\
+\large\textmd{Phase-1 Engineering Milestone Report (50\% Project Completion)}}
+
+\author{
+    \IEEEauthorblockN{Engineering Development Team}
+    \IEEEauthorblockA{\textit{Department of Autonomous Software Engineering} \\
+    Project: \texttt{SycnOps AI} \quad\textbar\quad Repo: \texttt{PukhrajSoni27/SycnOps} \quad\textbar\quad Build: \texttt{v2.2.0-Alpha}}
+}
+
+\maketitle
+
+\begin{abstract}
+Modern continuous integration workflows produce fragmented telemetry across distributed repositories, pull requests (PRs), issue backlogs, and commit streams. \textbf{SycnOps AI} addresses this challenge by providing an autonomous engineering intelligence platform. This report documents the \textbf{50\% project milestone (Phase-1 Completion)}, establishing: (i) an asynchronous, rate-limit-resilient GitHub telemetry ingestion pipeline; (ii) a deterministic 100-point repository Health Score model with bus factor risk quantification; (iii) a dual-backend parity core across Node.js/Express and Python/FastAPI; (iv) a federated hybrid persistence layer combining Firebase Firestore with in-memory fallback; and (v) an operational Cyber-Serif telemetry cockpit. We audit Phase-1 accomplishments and delineate the Phase-2 roadmap towards final delivery.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Software Telemetry, Repository Mining, Code Health Index, Bus Factor Analysis, Full-Stack DevOps.
+\end{IEEEkeywords}
+
+% ── Section I: Introduction ───────────────────────────────────────────────────
+\section{Introduction \& 50\% Milestone Scope}
+\IEEEPARstart{E}{ngineering} velocity in distributed software organizations is frequently hindered by telemetry fragmentation and subjective code quality assessments. Development teams lack unified visibility into multi-repository workloads, code review bottlenecks, maintainer dependency concentration (the \textit{Bus Factor}), and dormant security liabilities.
+
+The \textbf{SycnOps AI} project was initiated to deliver an autonomous, centralized engineering intelligence platform. The project lifecycle is divided into two distinct 50\% delivery phases:
+\begin{itemize}
+    \item \textbf{Phase 1 (Completed -- 50\% Milestone):} Foundation engineering, GitHub REST telemetry harvesting, dual-backend parity, algorithmic repository health evaluation, multi-provider identity, and the telemetry cockpit.
+    \item \textbf{Phase 2 (Upcoming -- Final 50\%):} Real-time webhook gateways, distributed Redis caching, and LLM-powered streaming AI Copilot integration.
+\end{itemize}
+
+% ── Section II: Phase-1 Architecture & Accomplishments ────────────────────────
+\section{Phase-1 Accomplishments (Completed 50\%)}
+
+\subsection{Resilient GitHub Telemetry Ingestion Pipeline}
+The data harvesting engine, implemented in \texttt{backend/lib/github.js}, autonomously bridges client workspaces with the GitHub REST API v3:
+\begin{itemize}
+    \item \textbf{Syntactic Normalization:} A regex parser transforms arbitrary input formats (e.g., \texttt{https://github.com/o/r}, \texttt{github.com/o/r}, or \texttt{o/r}) into normalized owner/repository pairs.
+    \item \textbf{Resilient HTTP Client (\texttt{ghFetch}):} Outgoing calls utilize an explicit 12-second \texttt{AbortController} timeout, custom user-agent headers, and token fallback prioritizing user-supplied Personal Access Tokens (PAT).
+    \item \textbf{Rate-Limit Handling:} Differentiates HTTP 401/403/404 errors, identifying private repositories requiring PAT credentials and isolating HTTP 429 rate-limit events.
+    \item \textbf{Concurrent Data Harvesting:} Employs \texttt{Promise.all} to concurrently ingest repository metadata, open issues, pull requests, and commit logs.
+\end{itemize}
+
+\subsection{100-Point Algorithmic Health Score Formulation}
+SycnOps calculates a deterministic Health Score $S(R) \in [0, 100]$ to eliminate subjective evaluations of repository maintenance:
+\begin{equation}
+S(R) = \operatorname{clamp}\left(60 + \Delta_{\text{close}} + \Delta_{\text{merge}} + \Delta_{\text{bugs}} + \Delta_{\text{sec}} + \Delta_{\text{rec}} + \Delta_{\text{gov}},\, 0,\, 100\right)
+\end{equation}
+where:
+\begin{align}
+\Delta_{\text{close}} &= \begin{cases} +12, & \text{if } \rho_I > 0.80 \\ +6, & \text{if } 0.60 < \rho_I \le 0.80 \\ -15, & \text{if } \rho_I < 0.30 \end{cases} \\
+\Delta_{\text{merge}} &= \begin{cases} +8, & \text{if } \rho_M > 0.75 \\ -10, & \text{if } \rho_M < 0.40 \end{cases}
+\end{align}
+Here, $\rho_I = \frac{I_{\text{closed}}}{I_{\text{closed}} + I_{\text{open}}}$ is the issue resolution ratio, and $\rho_M = \frac{P_{\text{merged}}}{P_{\text{total}}}$ is the PR merge efficiency. Label heuristics via regular expression matching deduct penalties for security vulnerabilities ($\Delta_{\text{sec}} = -10$) and excessive open bugs ($\Delta_{\text{bugs}} = -15$). Stale commits ($>365$ days) incur $\Delta_{\text{rec}} = -20$, while governance compliance (license and description) grants $\Delta_{\text{gov}} = +8$.
+
+\subsection{Bus Factor Risk Quantification}
+Maintainer concentration risk is modeled via:
+\begin{equation}
+B_{\%}(R) = \frac{\max_{c \in \mathcal{C}} (\text{commits}_c)}{\sum_{c \in \mathcal{C}} \text{commits}_c} \times 100
+\end{equation}
+Repositories exceeding $B_{\%}(R) > 60\%$ are flagged as \textbf{HIGH RISK}, indicating an unsustainable single-maintainer dependency.
+
+\subsection{Dual-Backend Engine Parity}
+The platform achieves complete functional and route parity across two production backends running concurrently on port 5000:
+\begin{enumerate}
+    \item \textbf{Node.js / Express Core (\texttt{backend/index.js}):} Built with native ES Modules, \texttt{bcryptjs}, \texttt{jsonwebtoken}, and Firebase Admin SDK 14.5.
+    \item \textbf{Python / FastAPI Core (\texttt{backend/main.py}):} Implemented with Python 3.11 asynchronous coroutines, \texttt{httpx}, \texttt{passlib}, and \texttt{pydantic v2}.
+\end{enumerate}
+
+\subsection{Hybrid Persistence \& Federated Identity}
+The backend incorporates a multi-tier data strategy. Google Cloud Firebase Firestore serves as primary document storage, paired with an automatic in-memory fallback for zero-dependency execution. Furthermore, 9 comprehensive Mongoose schemas (\texttt{User}, \texttt{Repository}, \texttt{Commit}, \texttt{Issue}, \texttt{PullRequest}, \texttt{Notification}, \texttt{AIHistory}, etc.) provide dedicated MongoDB compatibility. Authentication combines localized JWT issuance with federated Google/GitHub OAuth via Firebase Client popups.
+
+\subsection{Cyber-Serif Cockpit \& In-Browser Report Export}
+The frontend (React 18, TypeScript, Tailwind CSS, TanStack Query) introduces an operational telemetry cockpit:
+\begin{itemize}
+    \item \textbf{Dashboard \& Analytics:} Real-time KPI summaries, recent commit feeds, and Recharts activity velocity charts.
+    \item \textbf{Workspace \& Reviews:} Debounced live repository preview, PAT authentication, and centralized PR and Issue tracking.
+    \item \textbf{Autonomous Report Generator:} Client-side synthesis of self-contained, downloadable HTML audit reports.
+\end{itemize}
+
+% ── Section III: Milestone Audit Table ────────────────────────────────────────
+\section{Phase-1 Verification \& Audit Matrix}
+
+Table~\ref{tab:status} summarizes the subsystem verification results at the 50\% project milestone.
+
+\begin{table}[htbp]
+\caption{50\% Milestone Implementation Audit Matrix}
+\label{tab:status}
+\centering
+\scriptsize
+\begin{tabularx}{\columnwidth}{l X c}
+\toprule
+\textbf{Subsystem} & \textbf{Delivered Module Scope} & \textbf{Milestone Status} \\
+\midrule
+\textbf{Data Ingestion} & GitHub v3 client, `ghFetch`, rate-limit 429 handling & \textbf{Completed (100\%)} \\
+\textbf{Health Engine} & 100-pt scoring algorithm, Bus Factor, stale triage & \textbf{Completed (100\%)} \\
+\textbf{Dual Backend} & Complete Express $\parallel$ FastAPI route/logic parity & \textbf{Completed (100\%)} \\
+\textbf{Identity \& Auth} & Local JWT, bcrypt, Firebase Google/GitHub OAuth & \textbf{Completed (100\%)} \\
+\textbf{Persistence Tier}& Firestore driver, in-memory cache, 9 DB models & \textbf{Completed (100\%)} \\
+\textbf{Client Cockpit} & Dashboard, Repositories, PRs, Issues, Analytics & \textbf{Completed (100\%)} \\
+\textbf{Report Export} & In-browser standalone HTML audit report compiler & \textbf{Completed (100\%)} \\
+\textbf{DevOps Stack} & Multi-stage Dockerfile (Nginx + Node), Compose & \textbf{Completed (100\%)} \\
+\midrule
+\textbf{AI Copilot} & Schema complete; LLM streaming API integration & \textit{Phase 2 (Pending)} \\
+\textbf{Webhooks} & Real-time HMAC event push listener & \textit{Phase 2 (Pending)} \\
+\textbf{Distributed Cache}& Redis cluster for GitHub API response caching & \textit{Phase 2 (Pending)} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% ── Section IV: Phase-2 Roadmap ───────────────────────────────────────────────
+\section{Phase-2 Roadmap (Remaining 50\%)}
+The remaining 50\% development phase will advance SycnOps from an analytical telemetry platform into an active, event-driven AI platform:
+\begin{enumerate}
+    \item \textbf{LLM Copilot Streaming Gateway:} Activate the pre-configured \texttt{AIHistory} database model to support real-time streaming code reviews, PR summaries, and remediation recommendations via Gemini/Claude API integration.
+    \item \textbf{Event-Driven GitHub Webhook Architecture:} Implement an authenticated \texttt{/api/webhooks/github} ingress using HMAC-SHA256 signature verification, superseding polling with instantaneous push-based synchronization.
+    \item \textbf{Distributed Redis Caching Layer:} Introduce Redis for repository metadata caching to minimize outbound GitHub API consumption and achieve sub-30ms response latencies.
+    \item \textbf{Automated CI/CD Pipeline:} Finalize GitHub Actions workflows for continuous automated testing and multi-arch Docker image publication.
+\end{enumerate}
+
+% ── Section V: Conclusion ─────────────────────────────────────────────────────
+\section{Conclusion}
+The \textbf{50\% project milestone} of SycnOps AI successfully delivers the complete foundational software telemetry infrastructure. With live GitHub data harvesting, an algorithmic 100-point repository health model, dual-backend execution, hybrid multi-tier persistence, and an interactive Cyber-Serif client interface operational, the system is prepared for Phase-2 AI Copilot and webhook integration.
+
+\balance
+\begin{thebibliography}{00}
+\bibitem{spinellis2006} D.~Spinellis, ``Global code quality: An empirical study,'' \emph{IEEE Software}, vol.~23, no.~4, pp.~73--79, 2006.
+\bibitem{gousios2014} G.~Gousios \emph{et al.}, ``An exploratory study of the pull-based model,'' in \emph{Proc. ICSE}, 2014, pp.~345--355.
+\bibitem{vasilescu2015} B.~Vasilescu \emph{et al.}, ``Quality and productivity in GitHub PR workflows,'' in \emph{Proc. ESEC/FSE}, 2015.
+\bibitem{avelino2016} G.~Avelino \emph{et al.}, ``Estimating Truck Factors: Theory and validation,'' in \emph{Proc. SANER}, 2016.
+\bibitem{kalliamvakou2014} E.~Kalliamvakou \emph{et al.}, ``Promises and perils of mining GitHub,'' in \emph{Proc. MSR}, 2014.
+\end{thebibliography}
+
+\end{document}

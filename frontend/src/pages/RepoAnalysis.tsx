@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useParams, Link } from 'react-router-dom'
 import { apiGet } from '@/services/api'
 import {
   ArrowLeft, ExternalLink, Shield, AlertTriangle, Bug, Zap, BookOpen,
   GitBranch, GitPullRequest, Users, Clock, Star, GitFork, Package,
   Activity, TrendingUp, CheckCircle, XCircle, AlertCircle, Tag,
-  Calendar, Lock, Globe, Loader2, ChevronDown, ChevronUp, Download
+  Lock, Globe, Loader2, Download
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -542,44 +542,71 @@ export default function RepoAnalysis() {
             <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', fontFamily: 'var(--font-tech)', fontSize: 12, color: 'var(--text-muted)', alignItems: 'center' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Star size={12} style={{ color: '#F59E0B' }} /> {(repo.stars || 0).toLocaleString()}</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><GitFork size={12} style={{ color: '#38BDF8' }} /> {(repo.forks || 0).toLocaleString()}</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Users size={12} style={{ color: '#10B981' }} /> {a.watchersCount.toLocaleString()} watching</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><GitBranch size={12} /> {a.branchCount} branches</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Users size={12} style={{ color: '#10B981' }} /> {(a.watchersCount ?? 0).toLocaleString()} watching</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><GitBranch size={12} /> {a.branchCount || 0} branches</span>
               {repo.htmlUrl && <a href={repo.htmlUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#10B981', textDecoration: 'none' }}><ExternalLink size={12} /> View on GitHub</a>}
             </div>
           </div>
-          {/* Download Report Button */}
-          <button
-            id="download-report-btn"
-            onClick={() => {
-              setDownloading(true)
-              setTimeout(() => {
-                downloadReport(repo, a)
-                setDownloading(false)
-              }, 100)
-            }}
-            disabled={downloading}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '10px 18px',
-              background: downloading ? 'rgba(16,185,129,0.06)' : 'linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(56,189,248,0.08) 100%)',
-              border: '1px solid rgba(16,185,129,0.4)',
-              borderRadius: 10,
-              color: downloading ? 'rgba(16,185,129,0.5)' : '#10B981',
-              fontFamily: 'var(--font-tech)',
-              fontSize: 11,
-              letterSpacing: '.1em',
-              textTransform: 'uppercase',
-              cursor: downloading ? 'wait' : 'pointer',
-              transition: 'all .2s',
-              flexShrink: 0,
-              whiteSpace: 'nowrap',
-            }}
-            onMouseEnter={e => { if (!downloading) e.currentTarget.style.background = 'rgba(16,185,129,0.2)' }}
-            onMouseLeave={e => { if (!downloading) e.currentTarget.style.background = 'linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(56,189,248,0.08) 100%)' }}
-          >
-            <Download size={14} style={{ animation: downloading ? 'bounce 0.6s infinite' : 'none' }} />
-            {downloading ? 'Generating...' : 'Download Report'}
-          </button>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', flexShrink: 0 }}>
+            {/* View Pipeline Button */}
+            <Link
+              to={`/pipeline?repoId=${repoId}`}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 18px',
+                background: 'linear-gradient(135deg, rgba(89,9,7,0.7), rgba(89,9,7,0.35))',
+                border: '1px solid rgba(232,210,181,0.35)',
+                borderRadius: 10,
+                color: '#E8D2B5',
+                fontFamily: 'var(--font-tech)',
+                fontSize: 11,
+                letterSpacing: '.1em',
+                textTransform: 'uppercase',
+                textDecoration: 'none',
+                fontWeight: 600,
+                boxShadow: '0 4px 14px rgba(89,9,7,0.35)',
+                transition: 'all .2s',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <Activity size={14} color="#E8D2B5" />
+              View Pipeline
+            </Link>
+
+            {/* Download Report Button */}
+            <button
+              id="download-report-btn"
+              onClick={() => {
+                setDownloading(true)
+                setTimeout(() => {
+                  downloadReport(repo, a)
+                  setDownloading(false)
+                }, 100)
+              }}
+              disabled={downloading}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 18px',
+                background: downloading ? 'rgba(16,185,129,0.06)' : 'linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(56,189,248,0.08) 100%)',
+                border: '1px solid rgba(16,185,129,0.4)',
+                borderRadius: 10,
+                color: downloading ? 'rgba(16,185,129,0.5)' : '#10B981',
+                fontFamily: 'var(--font-tech)',
+                fontSize: 11,
+                letterSpacing: '.1em',
+                textTransform: 'uppercase',
+                cursor: downloading ? 'wait' : 'pointer',
+                transition: 'all .2s',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+              }}
+              onMouseEnter={e => { if (!downloading) e.currentTarget.style.background = 'rgba(16,185,129,0.2)' }}
+              onMouseLeave={e => { if (!downloading) e.currentTarget.style.background = 'linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(56,189,248,0.08) 100%)' }}
+            >
+              <Download size={14} style={{ animation: downloading ? 'bounce 0.6s infinite' : 'none' }} />
+              {downloading ? 'Generating...' : 'Download Report'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -597,10 +624,10 @@ export default function RepoAnalysis() {
           {/* Severity summary */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
             {[
-              { label: 'Critical', count: a.summary.criticalFindings, ...severityConfig.critical },
-              { label: 'High',     count: a.summary.highFindings,     ...severityConfig.high },
-              { label: 'Medium',   count: a.summary.mediumFindings,   ...severityConfig.medium },
-              { label: 'Low',      count: a.summary.lowFindings,      ...severityConfig.low }
+              { ...severityConfig.critical, count: a.summary?.criticalFindings ?? 0 },
+              { ...severityConfig.high,     count: a.summary?.highFindings ?? 0 },
+              { ...severityConfig.medium,   count: a.summary?.mediumFindings ?? 0 },
+              { ...severityConfig.low,      count: a.summary?.lowFindings ?? 0 }
             ].map(({ label, count, color, bg }) => (
               <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 10px', borderRadius: 8, backgroundColor: bg }}>
                 <span style={{ fontFamily: 'var(--font-tech)', fontSize: 10, color, letterSpacing: '.1em' }}>{label.toUpperCase()}</span>
@@ -612,28 +639,28 @@ export default function RepoAnalysis() {
 
         {/* Key metrics */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 14 }}>
-          <MetricCard label="Open Bugs" value={<AnimatedNumber value={a.openBugs} />} color={a.openBugs > 10 ? '#EF4444' : a.openBugs > 0 ? '#F97316' : '#10B981'} icon={Bug} />
-          <MetricCard label="Security" value={<AnimatedNumber value={a.securityIssues} />} color={a.securityIssues > 0 ? '#EF4444' : '#10B981'} icon={Shield} sub={a.securityIssues > 0 ? 'NEEDS ATTENTION' : 'ALL CLEAR'} />
-          <MetricCard label="Issue Close %" value={<AnimatedNumber value={a.issueCloseRate} suffix="%" />} color={a.issueCloseRate > 70 ? '#10B981' : a.issueCloseRate > 40 ? '#F59E0B' : '#EF4444'} icon={CheckCircle} />
-          <MetricCard label="PR Merge %" value={<AnimatedNumber value={a.prMergeRate} suffix="%" />} color={a.prMergeRate > 70 ? '#10B981' : '#F59E0B'} icon={GitPullRequest} />
-          <MetricCard label="Commits/30d" value={<AnimatedNumber value={a.recentCommits30d} />} color={a.recentCommits30d > 10 ? '#10B981' : '#F59E0B'} icon={Activity} />
-          <MetricCard label="Stale Issues" value={<AnimatedNumber value={a.staleIssues} />} color={a.staleIssues > 10 ? '#EF4444' : a.staleIssues > 0 ? '#F59E0B' : '#10B981'} icon={Clock} />
-          <MetricCard label="Stale PRs" value={<AnimatedNumber value={a.stalePRs} />} color={a.stalePRs > 0 ? '#F59E0B' : '#10B981'} icon={GitPullRequest} />
-          <MetricCard label="Releases" value={<AnimatedNumber value={a.totalReleases} />} color="#38BDF8" icon={Package} sub={a.latestRelease ? `LATEST: ${a.latestRelease.tagName}` : 'NO RELEASES YET'} />
+          <MetricCard label="Open Bugs" value={<AnimatedNumber value={a.openBugs || 0} />} color={a.openBugs > 10 ? '#EF4444' : a.openBugs > 0 ? '#F97316' : '#10B981'} icon={Bug} />
+          <MetricCard label="Security" value={<AnimatedNumber value={a.securityIssues || 0} />} color={a.securityIssues > 0 ? '#EF4444' : '#10B981'} icon={Shield} sub={a.securityIssues > 0 ? 'NEEDS ATTENTION' : 'ALL CLEAR'} />
+          <MetricCard label="Issue Close %" value={<AnimatedNumber value={a.issueCloseRate || 0} suffix="%" />} color={a.issueCloseRate > 70 ? '#10B981' : a.issueCloseRate > 40 ? '#F59E0B' : '#EF4444'} icon={CheckCircle} />
+          <MetricCard label="PR Merge %" value={<AnimatedNumber value={a.prMergeRate || 0} suffix="%" />} color={a.prMergeRate > 70 ? '#10B981' : '#F59E0B'} icon={GitPullRequest} />
+          <MetricCard label="Commits/30d" value={<AnimatedNumber value={a.recentCommits30d || 0} />} color={a.recentCommits30d > 10 ? '#10B981' : '#F59E0B'} icon={Activity} />
+          <MetricCard label="Stale Issues" value={<AnimatedNumber value={a.staleIssues || 0} />} color={a.staleIssues > 10 ? '#EF4444' : a.staleIssues > 0 ? '#F59E0B' : '#10B981'} icon={Clock} />
+          <MetricCard label="Stale PRs" value={<AnimatedNumber value={a.stalePRs || 0} />} color={a.stalePRs > 0 ? '#F59E0B' : '#10B981'} icon={GitPullRequest} />
+          <MetricCard label="Releases" value={<AnimatedNumber value={a.totalReleases || 0} />} color="#38BDF8" icon={Package} sub={a.latestRelease ? `LATEST: ${a.latestRelease.tagName}` : 'NO RELEASES YET'} />
         </div>
       </div>
 
       {/* Language Breakdown */}
-      {a.langBreakdown.length > 0 && (
+      {(a.langBreakdown || []).length > 0 && (
         <div className="s-spotlight" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 18, padding: 24, marginBottom: 20 }}>
           <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 400, color: 'var(--text)', marginBottom: 14 }}>Language Breakdown</h2>
           <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', height: 8, marginBottom: 14 }}>
-            {a.langBreakdown.map(({ lang, pct }) => (
+            {(a.langBreakdown || []).map(({ lang, pct }) => (
               <div key={lang} style={{ width: `${pct}%`, backgroundColor: langColors[lang] || '#666', minWidth: pct > 1 ? 4 : 0 }} title={`${lang}: ${pct}%`} />
             ))}
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
-            {a.langBreakdown.map(({ lang, pct }) => (
+            {(a.langBreakdown || []).map(({ lang, pct }) => (
               <div key={lang} style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-tech)', fontSize: 11, color: 'var(--text-muted)' }}>
                 <span style={{ width: 9, height: 9, borderRadius: '50%', backgroundColor: langColors[lang] || '#666' }} />
                 {lang} <span style={{ color: 'var(--text-dim)' }}>{pct}%</span>
@@ -654,9 +681,9 @@ export default function RepoAnalysis() {
             { label: 'Releases', ok: a.totalReleases > 0, detail: a.latestRelease ? a.latestRelease.tagName : 'No releases', icon: Package },
             { label: 'Wiki', ok: a.hasWiki, detail: a.hasWiki ? 'Enabled' : 'Disabled', icon: BookOpen },
             { label: 'Active (90d)', ok: a.daysSinceCommit !== null && a.daysSinceCommit < 90, detail: a.daysSinceCommit !== null ? `${a.daysSinceCommit}d since last commit` : 'No commits', icon: Activity },
-            { label: 'Visibility', ok: true, detail: repo.visibility || 'public', icon: Globe },
+            { label: 'Visibility', ok: true, detail: repo.visibility === 'private' ? 'Private' : 'Public', icon: repo.visibility === 'private' ? Lock : Globe },
             { label: 'Not Forked', ok: !a.isForked, detail: a.isForked ? 'Yes (fork)' : 'Original', icon: GitFork },
-          ].map(({ label, ok, detail, icon: Icon }) => (
+          ].map(({ label, ok, detail, icon: _Icon }) => (
             <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, backgroundColor: ok ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)', border: `1px solid ${ok ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}` }}>
               {ok ? <CheckCircle size={14} style={{ color: '#10B981', flexShrink: 0 }} /> : <XCircle size={14} style={{ color: '#EF4444', flexShrink: 0 }} />}
               <div style={{ flex: 1, minWidth: 0 }}>

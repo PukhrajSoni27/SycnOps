@@ -113,26 +113,33 @@ export const Plasma: React.FC<PlasmaProps> = ({
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const useCustomColor = color ? 1.0 : 0.0;
-    const customColorRgb = color ? hexToRgb(color) : [1, 0.42, 0.21];
-    const directionMultiplier = direction === 'reverse' ? -1.0 : 1.0;
+    let renderer: Renderer | null = null;
+    let canvas: HTMLCanvasElement | null = null;
+    let ro: ResizeObserver | null = null;
+    let raf = 0;
+    let handleMouseMove: ((e: MouseEvent) => void) | null = null;
 
-    const renderer = new Renderer({
-      webgl: 2,
-      alpha: true,
-      antialias: false,
-      dpr: Math.min(window.devicePixelRatio || 1, 2)
-    });
+    try {
+      const useCustomColor = color ? 1.0 : 0.0;
+      const customColorRgb = color ? hexToRgb(color) : [1, 0.42, 0.21];
+      const directionMultiplier = direction === 'reverse' ? -1.0 : 1.0;
 
-    const gl = renderer.gl;
-    const canvas = gl.canvas as HTMLCanvasElement;
-    canvas.style.display = 'block';
-    canvas.style.width = '100%';
-    canvas.style.height = '100%';
-    containerRef.current.appendChild(canvas);
+      renderer = new Renderer({
+        webgl: 2,
+        alpha: true,
+        antialias: false,
+        dpr: Math.min(window.devicePixelRatio || 1, 2)
+      });
 
-    const geometry = new Triangle(gl);
-    const program = new Program(gl, {
+      const gl = renderer.gl;
+      canvas = gl.canvas as HTMLCanvasElement;
+      canvas.style.display = 'block';
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
+      containerRef.current.appendChild(canvas);
+
+      const geometry = new Triangle(gl);
+      const program = new Program(gl, {
       vertex: vertex,
       fragment: fragment,
       uniforms: {
@@ -151,63 +158,66 @@ export const Plasma: React.FC<PlasmaProps> = ({
 
     const mesh = new Mesh(gl, { geometry, program });
 
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!mouseInteractive || !containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      mousePos.current.x = e.clientX - rect.left;
-      mousePos.current.y = e.clientY - rect.top;
-      const mouseUniform = program.uniforms.uMouse.value as Float32Array;
-      mouseUniform[0] = mousePos.current.x;
-      mouseUniform[1] = mousePos.current.y;
-    };
+      handleMouseMove = (e: MouseEvent) => {
+        if (!mouseInteractive || !containerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        mousePos.current.x = e.clientX - rect.left;
+        mousePos.current.y = e.clientY - rect.top;
+        const mouseUniform = program.uniforms.uMouse.value as Float32Array;
+        mouseUniform[0] = mousePos.current.x;
+        mouseUniform[1] = mousePos.current.y;
+      };
 
-    if (mouseInteractive) {
-      containerRef.current.addEventListener('mousemove', handleMouseMove);
+      if (mouseInteractive) {
+        containerRef.current.addEventListener('mousemove', handleMouseMove);
+      }
+
+      const setSize = () => {
+        if (!containerRef.current || !renderer) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        const width = Math.max(1, Math.floor(rect.width));
+        const height = Math.max(1, Math.floor(rect.height));
+        renderer.setSize(width, height);
+        const res = program.uniforms.iResolution.value as Float32Array;
+        res[0] = gl.drawingBufferWidth;
+        res[1] = gl.drawingBufferHeight;
+      };
+
+      ro = new ResizeObserver(setSize);
+      ro.observe(containerRef.current);
+      setSize();
+
+      const t0 = performance.now();
+      const loop = (t: number) => {
+        if (!renderer) return;
+        let timeValue = (t - t0) * 0.001;
+        if (direction === 'pingpong') {
+          const pingpongDuration = 10;
+          const segmentTime = timeValue % (pingpongDuration * 2);
+          const pingpongTime = segmentTime > pingpongDuration 
+            ? (pingpongDuration * 2 - segmentTime) 
+            : segmentTime;
+          (program.uniforms.iTime as any).value = pingpongTime;
+        } else {
+          (program.uniforms.iTime as any).value = timeValue;
+        }
+        renderer.render({ scene: mesh });
+        raf = requestAnimationFrame(loop);
+      };
+
+      raf = requestAnimationFrame(loop);
+    } catch (err) {
+      console.warn('WebGL/Plasma init failed, falling back:', err);
     }
 
-    const setSize = () => {
-      if (!containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      const width = Math.max(1, Math.floor(rect.width));
-      const height = Math.max(1, Math.floor(rect.height));
-      renderer.setSize(width, height);
-      const res = program.uniforms.iResolution.value as Float32Array;
-      res[0] = gl.drawingBufferWidth;
-      res[1] = gl.drawingBufferHeight;
-    };
-
-    const ro = new ResizeObserver(setSize);
-    ro.observe(containerRef.current);
-    setSize();
-
-    let raf = 0;
-    const t0 = performance.now();
-    const loop = (t: number) => {
-      let timeValue = (t - t0) * 0.001;
-      if (direction === 'pingpong') {
-        const pingpongDuration = 10;
-        const segmentTime = timeValue % (pingpongDuration * 2);
-        const pingpongTime = segmentTime > pingpongDuration 
-          ? (pingpongDuration * 2 - segmentTime) 
-          : segmentTime;
-        (program.uniforms.iTime as any).value = pingpongTime;
-      } else {
-        (program.uniforms.iTime as any).value = timeValue;
-      }
-      renderer.render({ scene: mesh });
-      raf = requestAnimationFrame(loop);
-    };
-
-    raf = requestAnimationFrame(loop);
-
     return () => {
-      cancelAnimationFrame(raf);
-      ro.disconnect();
-      if (mouseInteractive && containerRef.current) {
+      if (raf) cancelAnimationFrame(raf);
+      if (ro) ro.disconnect();
+      if (mouseInteractive && containerRef.current && handleMouseMove) {
         containerRef.current.removeEventListener('mousemove', handleMouseMove);
       }
       try {
-        if (containerRef.current && canvas.parentNode === containerRef.current) {
+        if (containerRef.current && canvas && canvas.parentNode === containerRef.current) {
           containerRef.current.removeChild(canvas);
         }
       } catch (err) {

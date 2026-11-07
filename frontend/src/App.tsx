@@ -10,6 +10,7 @@ import PullRequests from './pages/PullRequests'
 import Issues from './pages/Issues'
 import Analytics from './pages/Analytics'
 import Profile from './pages/Profile'
+import Pipeline from './pages/Pipeline'
 import MainLayout from './components/MainLayout'
 import ProtectedRoute from './components/ProtectedRoute'
 
@@ -34,6 +35,8 @@ export default function App() {
         <Route path="/repositories/:repoId/analysis" element={<Guard><RepoAnalysis /></Guard>} />
         <Route path="/pull-requests" element={<Guard><PullRequests /></Guard>} />
         <Route path="/issues" element={<Guard><Issues /></Guard>} />
+        <Route path="/pipeline" element={<Guard><Pipeline /></Guard>} />
+        <Route path="/pipelines" element={<Guard><Pipeline /></Guard>} />
         <Route path="/analytics" element={<Guard><Analytics /></Guard>} />
         <Route path="/profile" element={<Guard><Profile /></Guard>} />
       </Routes>

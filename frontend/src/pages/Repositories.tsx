@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { Lock, Globe } from 'lucide-react'
 import { useRepositoriesQuery, useImportRepositoryMutation } from '@/hooks/useApi'
 import { apiGet } from '@/services/api'
 
@@ -37,6 +38,7 @@ export default function Repositories() {
   const [repoInput, setRepoInput] = useState('')
   const [language, setLanguage] = useState('TypeScript')
   const [visibility, setVisibility] = useState('public')
+  const [githubToken, setGithubToken] = useState('')
 
   // GitHub preview state
   const [ghPreview, setGhPreview] = useState<any>(null)
@@ -52,25 +54,33 @@ export default function Repositories() {
   const isGitHubInput = !!parsed
 
   // Debounced GitHub preview fetch
-  const fetchPreview = useCallback(async (owner: string, repo: string) => {
+  const fetchPreview = useCallback(async (owner: string, repo: string, token?: string) => {
     setPreviewLoading(true)
     setPreviewError('')
     setGhPreview(null)
     try {
-      const data = await apiGet(`/repositories/github-info/${owner}/${repo}`)
+      const url = token
+        ? `/repositories/github-info/${owner}/${repo}?token=${encodeURIComponent(token)}`
+        : `/repositories/github-info/${owner}/${repo}`
+      const data = await apiGet(url)
       if (data.success && data.data) {
         setGhPreview(data.data)
+        if (data.data.visibility) {
+          setVisibility(data.data.visibility)
+        }
       } else {
-        setPreviewError(data.message || 'Repository not found on GitHub.')
+        setVisibility('private')
+        setPreviewError(data.message || "This repository is private. We can't access it.")
       }
     } catch (err: any) {
-      setPreviewError(err.message || 'Could not fetch repository info.')
+      setVisibility('private')
+      setPreviewError(err.message || "This repository is private. We can't access it.")
     } finally {
       setPreviewLoading(false)
     }
   }, [])
 
-  // Trigger preview when user types a valid GitHub URL
+  // Trigger preview when user types a valid GitHub URL or modifies token
   useEffect(() => {
     setGhPreview(null)
     setPreviewError('')
@@ -78,11 +88,11 @@ export default function Repositories() {
     if (!parsed) return
 
     const timer = setTimeout(() => {
-      fetchPreview(parsed.owner, parsed.repo)
+      fetchPreview(parsed.owner, parsed.repo, githubToken.trim() || undefined)
     }, 600) // debounce 600ms
 
     return () => clearTimeout(timer)
-  }, [repoInput]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [repoInput, githubToken])
 
   // Filter the repo list by the search input
   const filtered = repositories.filter(repo =>
@@ -97,40 +107,44 @@ export default function Repositories() {
     setModalError('')
     setImportSuccess('')
 
-    if (!parsed) {
-      setModalError('Enter a GitHub URL or owner/repo, for example facebook/react.')
+    const trimmed = repoInput.trim()
+    if (!trimmed) {
+      setModalError('Please enter a GitHub repository (e.g. facebook/react) or a custom name.')
+      return
+    }
+
+    if (isGitHubInput && previewError) {
+      setModalError(previewError)
       return
     }
 
     try {
       const imported = await importMutation.mutateAsync({
-        name: repoInput.trim()
+        name: trimmed,
+        language: !isGitHubInput ? language : undefined,
+        visibility: visibility, // Always preserve chosen visibility (public or private)
+        githubToken: githubToken.trim() || undefined
       })
 
       // Success
       setImportSuccess(isGitHubInput
-        ? `✅ Repository imported with live GitHub data!`
-        : `✅ Repository imported successfully!`
+        ? (visibility === 'private'
+            ? `✅ Private repository imported successfully!`
+            : `✅ Repository imported with live GitHub data!`)
+        : `✅ Repository "${trimmed}" created successfully!`
       )
 
-      // For GitHub imports: navigate to analysis after a short delay
-      if (isGitHubInput && imported?.id) {
+      if (imported?.id) {
         setTimeout(() => {
           navigate(`/repositories/${imported.id}/analysis`)
         }, 1200)
       } else {
-        // Auto-close modal for manual imports
         setTimeout(() => {
-          setShowImportModal(false)
-          setRepoInput('')
-          setLanguage('TypeScript')
-          setVisibility('public')
-          setGhPreview(null)
-          setImportSuccess('')
-        }, 1500)
+          closeModal()
+        }, 1200)
       }
     } catch (err: any) {
-      setModalError(err.message || 'Import failed. Please try again.')
+      setModalError(err.message || "This repository is private. We can't access it.")
     }
   }
 
@@ -139,6 +153,7 @@ export default function Repositories() {
     setRepoInput('')
     setLanguage('TypeScript')
     setVisibility('public')
+    setGithubToken('')
     setGhPreview(null)
     setPreviewError('')
     setModalError('')
@@ -157,11 +172,11 @@ export default function Repositories() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '48px', flexWrap: 'wrap', gap: '24px' }}>
         <div>
-          <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: 'clamp(32px, 4vw, 48px)', letterSpacing: '-.015em', color: 'var(--ink)', marginBottom: '8px' }}>
+          <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: 'clamp(32px, 4vw, 48px)', letterSpacing: '-.015em', color: 'var(--text)', marginBottom: '8px' }}>
             Repositories
           </h1>
-          <p style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--ink-2)' }}>
-            {repositories.length} repositories imported from GitHub.
+          <p style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-muted)' }}>
+            {repositories.length} repositories in your studio workspace.
           </p>
         </div>
         <button className="s-btn" onClick={() => setShowImportModal(true)}>
@@ -184,7 +199,7 @@ export default function Repositories() {
       {/* Repository Table */}
       <div className="s-panel" style={{ padding: '0', overflowX: 'auto' }}>
         {isLoading ? (
-          <div style={{ padding: '48px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--muted)' }}>
+          <div style={{ padding: '48px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-dim)' }}>
             LOADING REPOSITORIES...
           </div>
         ) : (
@@ -228,7 +243,7 @@ export default function Repositories() {
                         <div style={{
                           fontFamily: 'var(--font-sans)',
                           fontSize: '11px',
-                          color: 'var(--ink-2)',
+                          color: 'var(--text-muted)',
                           marginTop: '4px',
                           maxWidth: '340px',
                           overflow: 'hidden',
@@ -241,13 +256,49 @@ export default function Repositories() {
                     </div>
                   </td>
                   <td className="s-work__td s-work__meta">{repo.language}</td>
-                  <td className="s-work__td s-work__meta" style={{ textTransform: 'capitalize' }}>{repo.visibility}</td>
+                  <td className="s-work__td s-work__meta">
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontFamily: 'var(--font-mono)',
+                      backgroundColor: repo.visibility === 'private' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.1)',
+                      color: repo.visibility === 'private' ? '#F87171' : '#10B981',
+                      border: `1px solid ${repo.visibility === 'private' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.25)'}`,
+                      fontWeight: 600,
+                      letterSpacing: '0.04em'
+                    }}>
+                      {repo.visibility === 'private' ? <Lock size={11} /> : <Globe size={11} />}
+                      {repo.visibility === 'private' ? 'Private' : 'Public'}
+                    </span>
+                  </td>
                   <td className="s-work__td s-work__meta">
                     ★ {formatNumber(repo.stars)} &nbsp; ⑂ {formatNumber(repo.forks)} &nbsp; ⊙ {repo.openIssues}
                   </td>
                   <td className="s-work__td s-work__status s-work__status--active" style={{ paddingRight: '32px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span>SYNCED</span>
+                      <Link
+                        to={`/pipeline?repoId=${repo.id}`}
+                        style={{
+                          fontSize: '9px',
+                          fontFamily: 'var(--font-mono)',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          background: 'linear-gradient(135deg, rgba(89,9,7,0.7), rgba(89,9,7,0.35))',
+                          color: '#E8D2B5',
+                          border: '1px solid rgba(232,210,181,0.3)',
+                          letterSpacing: '0.08em',
+                          textTransform: 'uppercase',
+                          fontWeight: 600,
+                          textDecoration: 'none'
+                        }}
+                      >
+                        PIPELINE
+                      </Link>
                       {repo.source === 'github' && (
                         <Link
                           to={`/repositories/${repo.id}/analysis`}
@@ -274,7 +325,7 @@ export default function Repositories() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={5} style={{ padding: '48px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-2)' }}>
+                  <td colSpan={5} style={{ padding: '48px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)' }}>
                     {search ? 'NO REPOSITORIES MATCH YOUR SEARCH' : 'NO REPOSITORIES YET — CLICK "IMPORT REPOSITORY" TO ADD ONE'}
                   </td>
                 </tr>
@@ -295,19 +346,60 @@ export default function Repositories() {
           />
 
           {/* Modal Card */}
-          <div className="s-panel" style={{ position: 'relative', zIndex: 101, width: '100%', maxWidth: '520px', backgroundColor: 'var(--ground-2)' }}>
+          <div className="s-panel" style={{ position: 'relative', zIndex: 101, width: '100%', maxWidth: '520px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)' }}>
 
             <h2 className="s-panel__title">Import Repository</h2>
-            <p style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--ink-2)', marginBottom: '28px', lineHeight: 1.6 }}>
+            <p style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: 1.6 }}>
               Paste a GitHub repository URL, enter owner/repo, or type a custom name.
             </p>
+
+            {/* Quick Sample Buttons */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '0.05em' }}>QUICK SAMPLES:</span>
+              {[
+                { name: 'facebook/react', label: 'React' },
+                { name: 'vercel/next.js', label: 'Next.js' },
+                { name: 'tailwindlabs/tailwindcss', label: 'Tailwind' }
+              ].map(s => (
+                <button
+                  key={s.name}
+                  type="button"
+                  onClick={() => {
+                    setRepoInput(s.name)
+                    setModalError('')
+                    setImportSuccess('')
+                  }}
+                  style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '6px',
+                    padding: '3px 8px',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '10px',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.borderColor = '#10B981'
+                    e.currentTarget.style.color = '#10B981'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.borderColor = 'var(--border)'
+                    e.currentTarget.style.color = 'var(--text-muted)'
+                  }}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
 
             {/* Form */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '28px' }}>
 
               {/* Repo URL / Name */}
               <div>
-                <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-2)', marginBottom: '6px' }}>
+                <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px' }}>
                   GITHUB URL OR REPOSITORY NAME *
                 </label>
                 <input
@@ -340,11 +432,11 @@ export default function Repositories() {
               {isGitHubInput && previewLoading && (
                 <div style={{
                   padding: '16px',
-                  border: '1px solid var(--hair)',
+                  border: '1px solid var(--border)',
                   borderRadius: '8px',
                   fontFamily: 'var(--font-mono)',
                   fontSize: '11px',
-                  color: 'var(--ink-2)',
+                  color: 'var(--text-muted)',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px'
@@ -365,14 +457,23 @@ export default function Repositories() {
               {isGitHubInput && previewError && (
                 <div style={{
                   fontFamily: 'var(--font-mono)',
-                  fontSize: '11px',
-                  color: '#e74c3c',
-                  padding: '10px 14px',
-                  border: '1px solid #e74c3c',
-                  background: 'rgba(231,76,60,0.08)',
-                  borderRadius: '6px'
+                  fontSize: '12px',
+                  color: '#EF4444',
+                  padding: '14px 16px',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  borderRadius: '10px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
                 }}>
-                  ⚠ {previewError}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600 }}>
+                    <Lock size={15} color="#EF4444" />
+                    <span>{previewError}</span>
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                    This repository is private or inaccessible. We can't access it without authentication. If you own or have access to this repository, enter your GitHub Personal Access Token (PAT) below to authenticate.
+                  </div>
                 </div>
               )}
 
@@ -392,20 +493,32 @@ export default function Repositories() {
                       />
                     )}
                     <div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>
                         {ghPreview.fullName}
                       </div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--ink-2)' }}>
-                        {ghPreview.language} · {ghPreview.visibility}
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                        <span>{ghPreview.language}</span>
+                        <span>·</span>
+                        <span style={{
+                          color: visibility === 'private' ? '#EF4444' : '#10B981',
+                          textTransform: 'uppercase',
+                          fontWeight: 600,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '3px'
+                        }}>
+                          {visibility === 'private' ? <Lock size={10} /> : <Globe size={10} />}
+                          {visibility}
+                        </span>
                       </div>
                     </div>
                   </div>
                   {ghPreview.description && (
-                    <div style={{ fontFamily: 'var(--font-sans)', fontSize: '12px', color: 'var(--ink-2)', marginBottom: '10px', lineHeight: 1.5 }}>
+                    <div style={{ fontFamily: 'var(--font-sans)', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px', lineHeight: 1.5 }}>
                       {ghPreview.description}
                     </div>
                   )}
-                  <div style={{ display: 'flex', gap: '16px', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-2)' }}>
+                  <div style={{ display: 'flex', gap: '16px', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)' }}>
                     <span>★ {formatNumber(ghPreview.stars)}</span>
                     <span>⑂ {formatNumber(ghPreview.forks)}</span>
                     <span>⊙ {ghPreview.openIssues} issues</span>
@@ -431,47 +544,115 @@ export default function Repositories() {
                 </div>
               )}
 
-              {/* Only show language/visibility pickers for non-GitHub imports */}
+              {/* Language selection for custom non-GitHub repos */}
               {!isGitHubInput && repoInput.trim() && (
-                <>
-                  {/* Language */}
-                  <div>
-                    <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-2)', marginBottom: '6px' }}>
-                      LANGUAGE
-                    </label>
-                    <select
-                      className="s-form__input"
-                      value={language}
-                      onChange={(e) => setLanguage(e.target.value)}
-                      style={{ width: '100%' }}
-                    >
-                      <option value="TypeScript">TypeScript</option>
-                      <option value="JavaScript">JavaScript</option>
-                      <option value="Python">Python</option>
-                      <option value="Go">Go</option>
-                      <option value="Rust">Rust</option>
-                      <option value="Java">Java</option>
-                      <option value="C++">C++</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </div>
+                <div>
+                  <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                    LANGUAGE
+                  </label>
+                  <select
+                    className="s-form__input"
+                    value={language}
+                    onChange={(e) => setLanguage(e.target.value)}
+                    style={{ width: '100%' }}
+                  >
+                    <option value="TypeScript">TypeScript</option>
+                    <option value="JavaScript">JavaScript</option>
+                    <option value="Python">Python</option>
+                    <option value="Go">Go</option>
+                    <option value="Rust">Rust</option>
+                    <option value="Java">Java</option>
+                    <option value="C++">C++</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              )}
 
-                  {/* Visibility */}
-                  <div>
-                    <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-2)', marginBottom: '6px' }}>
-                      VISIBILITY
-                    </label>
-                    <select
-                      className="s-form__input"
-                      value={visibility}
-                      onChange={(e) => setVisibility(e.target.value)}
-                      style={{ width: '100%' }}
+              {/* Visibility Selector - ALWAYS available */}
+              {repoInput.trim() && (
+                <div>
+                  <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                    VISIBILITY
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setVisibility('public')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        border: `1px solid ${visibility === 'public' ? '#10B981' : 'var(--border)'}`,
+                        backgroundColor: visibility === 'public' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.03)',
+                        color: visibility === 'public' ? '#10B981' : 'var(--text-muted)',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
                     >
-                      <option value="public">Public</option>
-                      <option value="private">Private</option>
-                    </select>
+                      <Globe size={13} />
+                      <span>Public</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVisibility('private')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        border: `1px solid ${visibility === 'private' ? '#EF4444' : 'var(--border)'}`,
+                        backgroundColor: visibility === 'private' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(255, 255, 255, 0.03)',
+                        color: visibility === 'private' ? '#EF4444' : 'var(--text-muted)',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <Lock size={13} />
+                      <span>Private</span>
+                    </button>
                   </div>
-                </>
+                </div>
+              )}
+
+              {/* Optional GitHub Token for private repository live access */}
+              {isGitHubInput && (visibility === 'private' || !!previewError) && (
+                <div style={{
+                  padding: '14px',
+                  borderRadius: '10px',
+                  backgroundColor: 'rgba(239, 68, 68, 0.04)',
+                  border: '1px solid rgba(239, 68, 68, 0.2)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#F87171', fontWeight: 600 }}>
+                      GITHUB ACCESS TOKEN {previewError ? '(REQUIRED FOR ACCESS)' : '(OPTIONAL)'}
+                    </label>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-dim)' }}>
+                      repo scope
+                    </span>
+                  </div>
+                  <input
+                    type="password"
+                    className="s-form__input"
+                    placeholder="ghp_... (paste classic PAT to authenticate private access)"
+                    value={githubToken}
+                    onChange={(e) => setGithubToken(e.target.value)}
+                    style={{ width: '100%', fontSize: '11px' }}
+                  />
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-muted)', marginTop: '6px', lineHeight: 1.4 }}>
+                    🔒 Used securely to authenticate with GitHub and verify access to private repositories.
+                  </div>
+                </div>
               )}
 
               {/* Success message */}
@@ -498,8 +679,21 @@ export default function Repositories() {
 
               {/* Error message */}
               {modalError && (
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#e74c3c', padding: '10px 14px', border: '1px solid #e74c3c', background: 'rgba(231,76,60,0.08)', borderRadius: '6px' }}>
-                  ⚠ {modalError}
+                <div style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '12px',
+                  color: '#EF4444',
+                  padding: '12px 16px',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontWeight: 600
+                }}>
+                  <Lock size={15} color="#EF4444" />
+                  <span>{modalError}</span>
                 </div>
               )}
             </div>
@@ -512,7 +706,7 @@ export default function Repositories() {
               <button
                 className="s-btn"
                 onClick={handleImport}
-                disabled={importMutation.isPending || (isGitHubInput && previewLoading) || !!importSuccess}
+                disabled={importMutation.isPending || (isGitHubInput && previewLoading) || (isGitHubInput && !!previewError) || !!importSuccess}
               >
                 {importMutation.isPending
                   ? 'Importing...'

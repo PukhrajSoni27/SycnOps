@@ -21,8 +21,10 @@ export default function Login() {
         localStorage.setItem('sycnops_token', res.token)
         localStorage.setItem('sycnops_user', JSON.stringify(res.user))
         window.dispatchEvent(new Event('sycnops_user_updated'))
+        navigate('/dashboard')
+      } else {
+        setError(res.message || 'Sign in failed. Check your credentials.')
       }
-      navigate('/dashboard')
     } catch (err: any) {
       setError(err.message || 'Sign in failed.')
     } finally {
@@ -33,7 +35,7 @@ export default function Login() {
   return (
     <div className="s-auth">
       <div className="s-auth__brand">
-        <Link to="/" className="s-nav__logo" style={{ color: 'var(--ground)' }}>
+        <Link to="/" className="s-nav__logo" style={{ color: 'var(--text)' }}>
           SycnOps<span className="s-nav__logo-period">.</span>
         </Link>
         <div>
@@ -45,11 +47,11 @@ export default function Login() {
         </div>
       </div>
       <div className="s-auth__panel">
-        <Plasma color="#ff6b35" speed={0.6} direction="forward" scale={1.1} opacity={0.85} mouseInteractive={true} />
+        <Plasma color="#10b981" speed={0.5} direction="forward" scale={1.1} opacity={0.65} mouseInteractive={true} />
         <div className="s-auth__box">
           <div style={{ marginBottom: '24px' }}>
             <span className="s-overline">Sign in</span>
-            <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '32px', letterSpacing: '-.015em', color: 'var(--ink)' }}>Welcome back</h2>
+            <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '32px', letterSpacing: '-.015em', color: 'var(--text)' }}>Welcome back</h2>
           </div>
           <SocialAuthButtons
             loading={loading}
@@ -81,8 +83,8 @@ export default function Login() {
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
           </form>
-          <div style={{ marginTop: '32px', paddingTop: '24px', borderTop: '1px solid var(--hair)', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-2)' }}>
-            No account? <Link to="/register" style={{ color: 'var(--pigment)', textDecoration: 'none', fontWeight: 600 }}>Create one</Link>
+          <div style={{ marginTop: '32px', paddingTop: '24px', borderTop: '1px solid var(--border)', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)' }}>
+            No account? <Link to="/register" style={{ color: 'var(--emerald)', textDecoration: 'none', fontWeight: 600 }}>Create one</Link>
           </div>
         </div>
       </div>

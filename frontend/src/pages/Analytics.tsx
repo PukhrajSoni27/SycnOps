@@ -9,6 +9,7 @@ export default function Analytics() {
   // Custom Dark Tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
+      const name = payload[0].name === 'prs' ? 'Pull Requests' : payload[0].name === 'commits' ? 'Commits' : payload[0].name
       return (
         <div style={{
           backgroundColor: '#050505',
@@ -20,7 +21,7 @@ export default function Analytics() {
           fontSize: '12px'
         }}>
           <p style={{ color: 'var(--emerald)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</p>
-          <p style={{ color: '#EBEBEB' }}>{payload[0].name}: <strong style={{ color: '#10B981' }}>{payload[0].value}</strong></p>
+          <p style={{ color: '#EBEBEB' }}>{name}: <strong style={{ color: '#10B981' }}>{payload[0].value}</strong></p>
         </div>
       )
     }

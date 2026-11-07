@@ -8,10 +8,10 @@ import { usePullRequestsQuery, useRepositoriesQuery } from '@/hooks/useApi'
 
 // Status badge config
 const STATUS_CONFIG = {
-  open:   { label: 'Open',   bg: 'rgba(56,189,248,0.12)',  color: '#38BDF8', border: 'rgba(56,189,248,0.3)',  icon: Circle },
-  merged: { label: 'Merged', bg: 'rgba(16,185,129,0.12)',  color: '#10B981', border: 'rgba(16,185,129,0.3)',  icon: GitMerge },
-  closed: { label: 'Closed', bg: 'rgba(239,68,68,0.12)',   color: '#EF4444', border: 'rgba(239,68,68,0.3)',   icon: AlertCircle },
-  draft:  { label: 'Draft',  bg: 'rgba(148,163,184,0.12)', color: '#94A3B8', border: 'rgba(148,163,184,0.3)', icon: FileCode },
+  open: { label: 'Open', bg: 'rgba(56,189,248,0.12)', color: '#38BDF8', border: 'rgba(56,189,248,0.3)', icon: Circle },
+  merged: { label: 'Merged', bg: 'rgba(16,185,129,0.12)', color: '#10B981', border: 'rgba(16,185,129,0.3)', icon: GitMerge },
+  closed: { label: 'Closed', bg: 'rgba(239,68,68,0.12)', color: '#EF4444', border: 'rgba(239,68,68,0.3)', icon: AlertCircle },
+  draft: { label: 'Draft', bg: 'rgba(148,163,184,0.12)', color: '#94A3B8', border: 'rgba(148,163,184,0.3)', icon: FileCode },
 }
 
 function StatusBadge({ status, draft }: { status: string; draft?: boolean }) {
@@ -53,7 +53,7 @@ export default function PullRequests() {
   const [repoFilter, setRepoFilter] = useState('all')
 
   // Compute summary stats
-  const open   = pullRequests.filter(p => p.status === 'open').length
+  const open = pullRequests.filter(p => p.status === 'open').length
   const merged = pullRequests.filter(p => p.status === 'merged').length
   const closed = pullRequests.filter(p => p.status === 'closed').length
   const drafts = pullRequests.filter((p: any) => p.draft).length
@@ -84,7 +84,7 @@ export default function PullRequests() {
       total: repoPRs.length,
       open: repoPRs.filter(p => p.status === 'open').length,
       merged: repoPRs.filter(p => p.status === 'merged').length,
-      closed: repoPRs.filter(p => p.status === 'closed' && p.status !== 'merged').length,
+      closed: repoPRs.filter(p => p.status === 'closed').length,
     }
   }).filter(r => r.total > 0)
 

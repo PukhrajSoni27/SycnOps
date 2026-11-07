@@ -4,7 +4,12 @@ import {
   fetchPullRequests,
   fetchIssues,
   fetchAnalytics,
-  importRepository
+  importRepository,
+  fetchPipelines,
+  triggerPipelineRun,
+  cancelPipelineRun,
+  fetchRepoAnalysisPipeline,
+  runRepoAnalysisPipeline
 } from '@/services/api'
 
 export function useRepositoriesQuery() {
@@ -23,6 +28,53 @@ export function useAnalyticsQuery() {
   return useQuery({ queryKey: ['analytics'], queryFn: fetchAnalytics })
 }
 
+export function usePipelinesQuery(filters?: { status?: string; repo?: string }) {
+  return useQuery({
+    queryKey: ['pipelines', filters?.status, filters?.repo],
+    queryFn: () => fetchPipelines(filters),
+    refetchInterval: 5000 // Poll every 5s for live updates on running pipelines
+  })
+}
+
+export function useTriggerPipelineMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: triggerPipelineRun,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pipelines'] })
+    }
+  })
+}
+
+export function useCancelPipelineMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: cancelPipelineRun,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pipelines'] })
+    }
+  })
+}
+
+export function useRepoAnalysisPipelineQuery(repoId?: string | number) {
+  return useQuery({
+    queryKey: ['repo-analysis-pipeline', repoId],
+    queryFn: () => fetchRepoAnalysisPipeline(repoId),
+    staleTime: 60000
+  })
+}
+
+export function useRunRepoAnalysisPipelineMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (repoId?: string | number) => runRepoAnalysisPipeline(repoId),
+    onSuccess: (_, repoId) => {
+      queryClient.invalidateQueries({ queryKey: ['repo-analysis-pipeline', repoId] })
+      queryClient.invalidateQueries({ queryKey: ['repo-analysis-pipeline'] })
+    }
+  })
+}
+
 export function useImportRepositoryMutation() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -33,6 +85,11 @@ export function useImportRepositoryMutation() {
       queryClient.invalidateQueries({ queryKey: ['issues'] })
       queryClient.invalidateQueries({ queryKey: ['analytics'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['pipelines'] })
+      queryClient.invalidateQueries({ queryKey: ['repo-analysis-pipeline'] })
     }
   })
 }
+
+
+

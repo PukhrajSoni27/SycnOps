@@ -30,6 +30,8 @@ export function initFirebase() {
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
   const privateKey = process.env.FIREBASE_PRIVATE_KEY
 
+  const isPlaceholder = (val) => !val || val.includes('YOUR_PRIVATE_KEY_HERE') || val.includes('xxxx') || val.length < 100
+
   try {
     if (serviceAccountPath) {
       // Load from JSON file (recommended for production)
@@ -37,7 +39,7 @@ export function initFirebase() {
       const serviceAccount = JSON.parse(raw)
       initializeApp({ credential: cert(serviceAccount) })
       console.log('✅ Firebase Admin initialized via service account file')
-    } else if (projectId && clientEmail && privateKey) {
+    } else if (projectId && clientEmail && privateKey && !isPlaceholder(privateKey) && !isPlaceholder(clientEmail)) {
       // Load from environment variables
       initializeApp({
         credential: cert({
@@ -49,13 +51,7 @@ export function initFirebase() {
       })
       console.log(`✅ Firebase Admin (Firestore) connected to project: ${projectId}`)
     } else {
-      console.warn(
-        '⚠️  Firebase Admin credentials not found in backend.env.\n' +
-        '   → Option A: Set FIREBASE_SERVICE_ACCOUNT_PATH=/path/to/serviceAccount.json\n' +
-        '   → Option B: Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY\n' +
-        '   Get these from: Firebase Console → Project Settings → Service Accounts\n' +
-        '   Falling back to in-memory storage.'
-      )
+      console.log('ℹ️  Firebase Admin credentials not set or using placeholder — running in in-memory mode.')
       return null
     }
 

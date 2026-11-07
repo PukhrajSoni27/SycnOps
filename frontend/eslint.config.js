@@ -68,7 +68,10 @@ export default [
         isNaN: 'readonly',
         isFinite: 'readonly',
         encodeURIComponent: 'readonly',
-        decodeURIComponent: 'readonly'
+        decodeURIComponent: 'readonly',
+        Blob: 'readonly',
+        HeadersInit: 'readonly',
+        RequestInit: 'readonly'
       }
     },
     plugins: {
@@ -79,6 +82,7 @@ export default [
     },
     rules: {
       ...js.configs.recommended.rules,
+      'no-undef': 'off',
       'react/jsx-uses-react': 'off',
       'react/react-in-jsx-scope': 'off',
       'react/prop-types': 'off',

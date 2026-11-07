@@ -144,19 +144,34 @@ export default function Landing() {
 
   const features = [
     {
-      icon: <Cpu className="w-5 h-5 text-emerald-400" />,
+      step: '01',
+      tag: 'PIPELINE_ENGINE',
+      icon: Cpu,
       title: 'Automated Pipeline Engine',
-      desc: 'Orchestrate CI/CD builds, automated code reviews, and full-stack environment provisioning seamlessly.'
+      desc: 'Orchestrate CI/CD builds, automated code reviews, and full-stack environment provisioning seamlessly.',
+      badge: 'Continuous CI/CD',
+      metricLabel: 'EXECUTION',
+      metricVal: '99.98% AUTO'
     },
     {
-      icon: <Activity className="w-5 h-5 text-emerald-400" />,
+      step: '02',
+      tag: 'LIVE_TELEMETRY',
+      icon: Activity,
       title: 'Real-Time Telemetry',
-      desc: 'Track repository pull requests, active issues, and build velocity with continuous live analytics.'
+      desc: 'Track repository pull requests, active issues, and build velocity with continuous live analytics.',
+      badge: 'Live Sync',
+      metricLabel: 'LATENCY',
+      metricVal: '< 200MS'
     },
     {
-      icon: <Shield className="w-5 h-5 text-emerald-400" />,
+      step: '03',
+      tag: 'DEFENSE_SHIELD',
+      icon: Shield,
       title: 'Zero-Trust Security',
-      desc: 'SOC2 compliant RBAC infrastructure, encrypted auth tokens, and automated code vulnerability scanning.'
+      desc: 'SOC2 compliant RBAC infrastructure, encrypted auth tokens, and automated code vulnerability scanning.',
+      badge: 'Zero-Trust Guard',
+      metricLabel: 'PROTECTION',
+      metricVal: 'AES-256'
     }
   ]
 
@@ -234,6 +249,37 @@ export default function Landing() {
             </button>
           </div>
         </div>
+
+        {/* Mobile Navigation Drawer */}
+        {mobileMenuOpen && (
+          <div style={{
+            position: 'fixed',
+            top: '68px',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(5, 5, 5, 0.96)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            zIndex: 99,
+            padding: '36px var(--pad-x)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '24px'
+          }}>
+            <a href="#features" className="s-nav__link" style={{ fontSize: '18px', color: '#ffffff' }} onClick={() => setMobileMenuOpen(false)}>Features</a>
+            <a href="#manifesto" className="s-nav__link" style={{ fontSize: '18px', color: '#ffffff' }} onClick={() => setMobileMenuOpen(false)}>Manifesto</a>
+            <a href="#pricing" className="s-nav__link" style={{ fontSize: '18px', color: '#ffffff' }} onClick={() => setMobileMenuOpen(false)}>Pricing</a>
+            <a href="#changelog" className="s-nav__link" style={{ fontSize: '18px', color: '#ffffff' }} onClick={() => setMobileMenuOpen(false)}>Changelog</a>
+            <div style={{ height: '1px', backgroundColor: 'rgba(255, 255, 255, 0.1)', margin: '8px 0' }} />
+            <Link to="/login" style={{ fontFamily: 'var(--font-sans)', fontSize: '16px', color: '#ffffff', textDecoration: 'none' }} onClick={() => setMobileMenuOpen(false)}>
+              Log in
+            </Link>
+            <Link to="/register" className="s-btn-white-pill" style={{ justifyContent: 'center' }} onClick={() => setMobileMenuOpen(false)}>
+              Get Early Access
+            </Link>
+          </div>
+        )}
       </header>
 
       {/* Hero Section */}
@@ -370,26 +416,105 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Features Grid Section */}
-      <section id="features" style={{ position: 'relative', zIndex: 10, padding: '100px var(--pad-x)', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-        <div className="s-inner">
+      {/* Features Grid Section — Editorial Palette: Muted Sage Grey (#A5A79B), Warm Cream Beige (#E8D2B5), Deep Burgundy (#590907) */}
+      <section id="features" className="s-features-section">
+        {/* Subtle Top Glowing Line */}
+        <div className="s-features-section__top-glow" />
+
+        <div className="s-inner" style={{ position: 'relative', zIndex: 2 }}>
+          {/* Section Header */}
           <div style={{ textAlign: 'center', marginBottom: '64px' }}>
-            <span className="s-overline">CORE CAPABILITIES</span>
-            <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: 'clamp(32px, 4vw, 54px)', fontWeight: 300, color: '#ffffff', letterSpacing: '-0.02em' }}>
-              Designed for Autonomous Operations
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '6px 16px',
+              borderRadius: '999px',
+              background: 'rgba(89, 9, 7, 0.45)',
+              border: '1px solid rgba(165, 167, 155, 0.35)',
+              marginBottom: '22px',
+              boxShadow: '0 4px 16px rgba(89, 9, 7, 0.35)'
+            }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#E8D2B5', boxShadow: '0 0 10px #E8D2B5' }} />
+              <span style={{ fontFamily: 'var(--font-tech)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.22em', textTransform: 'uppercase', color: '#E8D2B5' }}>
+                CORE CAPABILITIES
+              </span>
+            </div>
+
+            <h2 style={{
+              fontFamily: 'var(--font-serif)',
+              fontSize: 'clamp(34px, 4.5vw, 56px)',
+              fontWeight: 300,
+              color: '#E8D2B5',
+              letterSpacing: '-0.025em',
+              lineHeight: 1.12,
+              marginBottom: '18px',
+              textShadow: '0 0 40px rgba(89, 9, 7, 0.6)'
+            }}>
+              Designed for <span style={{ fontStyle: 'italic', color: '#ffffff' }}>Autonomous</span> Operations
             </h2>
+
+            <p style={{
+              fontFamily: 'var(--font-sans)',
+              fontSize: '16px',
+              lineHeight: 1.65,
+              color: '#A5A79B',
+              maxWidth: '620px',
+              margin: '0 auto',
+              fontWeight: 300
+            }}>
+              Autonomous CI/CD orchestration, continuous code telemetry, and defense-grade infrastructure calibrated for elite engineering teams.
+            </p>
           </div>
 
+          {/* Cards Grid */}
           <div className="s-feature-grid">
-            {features.map((f, i) => (
-              <div key={i} className="s-feature-card s-spotlight">
-                <div className="s-feature-card__icon">
-                  {f.icon}
+            {features.map((f, i) => {
+              const IconComp = f.icon
+              return (
+                <div
+                  key={i}
+                  className="s-feature-card s-spotlight"
+                  onMouseMove={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect()
+                    e.currentTarget.style.setProperty('--mouse-x', `${e.clientX - rect.left}px`)
+                    e.currentTarget.style.setProperty('--mouse-y', `${e.clientY - rect.top}px`)
+                  }}
+                >
+                  {/* Top Meta Bar */}
+                  <div className="s-feature-card__meta-bar">
+                    <span className="s-feature-card__step">
+                      {f.step} // {f.tag}
+                    </span>
+                    <span className="s-feature-card__badge">
+                      <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#E8D2B5' }} />
+                      {f.badge}
+                    </span>
+                  </div>
+
+                  {/* Icon Box */}
+                  <div className="s-feature-card__icon">
+                    <IconComp className="w-6 h-6" style={{ color: '#E8D2B5' }} />
+                  </div>
+
+                  {/* Title & Desc */}
+                  <h3 className="s-feature-card__title">{f.title}</h3>
+                  <p className="s-feature-card__desc">{f.desc}</p>
+
+                  {/* Bottom Footer / Metric */}
+                  <div className="s-feature-card__footer">
+                    <div>
+                      <div className="s-feature-card__metric-label">{f.metricLabel}</div>
+                      <div className="s-feature-card__metric-val">{f.metricVal}</div>
+                    </div>
+                    <div className="s-feature-card__action">
+                      <span>Explore</span>
+                      <ArrowRight className="w-3.5 h-3.5" style={{ color: '#E8D2B5' }} />
+                    </div>
+                  </div>
                 </div>
-                <h3 className="s-feature-card__title">{f.title}</h3>
-                <p className="s-feature-card__desc">{f.desc}</p>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       </section>
@@ -528,3 +653,7 @@ export default function Landing() {
     </div>
   )
 }
+
+
+
+

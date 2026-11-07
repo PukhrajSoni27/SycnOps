@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Star, GitFork, AlertCircle, GitPullRequest, GitCommit, Users, Shield, Activity, ExternalLink, Loader2 } from 'lucide-react'
+import { ArrowLeft, Star, GitFork, AlertCircle, GitPullRequest, Users, Shield, Activity, ExternalLink, Loader2, Lock, Globe } from 'lucide-react'
 import { apiGet } from '@/services/api'
 
 export default function RepoDetail() {
@@ -90,6 +90,16 @@ export default function RepoDetail() {
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><GitFork className="w-3.5 h-3.5" style={{ color: '#38BDF8' }} /> {fmtNum(repo.forks || 0)}</span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><AlertCircle className="w-3.5 h-3.5" style={{ color: '#EF4444' }} /> {repo.openIssues} issues</span>
             <span>{repo.language}</span>
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              color: repo.visibility === 'private' ? '#F87171' : '#10B981',
+              fontWeight: 500
+            }}>
+              {repo.visibility === 'private' ? <Lock className="w-3.5 h-3.5" /> : <Globe className="w-3.5 h-3.5" />}
+              {repo.visibility === 'private' ? 'Private' : 'Public'}
+            </span>
             {repo.htmlUrl && <a href={repo.htmlUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#10B981', textDecoration: 'none' }}><ExternalLink className="w-3.5 h-3.5" /> GitHub</a>}
           </div>
           {(repo.topics || []).length > 0 && (

@@ -14,6 +14,7 @@ const navigation: NavItem[] = [
   { name: 'Issues', href: '/issues' },
   { name: 'Analytics', href: '/analytics' },
   { name: 'Profile', href: '/profile' },
+  { name: 'Pipeline', href: '/pipeline' },
 ]
 
 interface MainLayoutProps {
@@ -90,16 +91,54 @@ export default function MainLayout({ children }: MainLayoutProps) {
         </div>
         
         <nav className="s-sidebar__nav">
-          {navigation.map((item) => (
-            <Link
-              key={item.name}
-              to={item.href}
-              className={`s-sidebar__link ${location.pathname === item.href ? 'is-active' : ''}`}
-              onClick={() => setSidebarOpen(false)}
-            >
-              {item.name}
-            </Link>
-          ))}
+          {navigation.map((item) => {
+            const isActive = location.pathname === item.href || (item.href !== '/dashboard' && location.pathname.startsWith(item.href))
+            const isPipeline = item.name === 'Pipeline'
+            return (
+              <Link
+                key={item.name}
+                to={item.href}
+                className={`s-sidebar__link ${isActive ? 'is-active' : ''} ${isPipeline ? 'is-pipeline' : ''}`}
+                style={
+                  isPipeline
+                    ? {
+                        color: '#E8D2B5',
+                        ...(isActive
+                          ? {
+                              borderLeftColor: '#590907',
+                              background: 'linear-gradient(90deg, rgba(89, 9, 7, 0.65) 0%, rgba(89, 9, 7, 0.18) 100%)',
+                              boxShadow: 'inset 3px 0 16px rgba(89, 9, 7, 0.6)',
+                            }
+                          : {}),
+                      }
+                    : undefined
+                }
+                onClick={() => setSidebarOpen(false)}
+              >
+                <span>{item.name}</span>
+                {isPipeline && (
+                  <span
+                    style={{
+                      marginLeft: 'auto',
+                      fontSize: '9px',
+                      fontFamily: 'var(--font-tech)',
+                      letterSpacing: '0.12em',
+                      textTransform: 'uppercase',
+                      padding: '2px 7px',
+                      borderRadius: '999px',
+                      backgroundColor: isActive ? '#590907' : 'rgba(89, 9, 7, 0.45)',
+                      border: '1px solid rgba(232, 210, 181, 0.35)',
+                      color: '#E8D2B5',
+                      fontWeight: 600,
+                      boxShadow: '0 2px 8px rgba(89, 9, 7, 0.5)',
+                    }}
+                  >
+                    CI/CD
+                  </span>
+                )}
+              </Link>
+            )
+          })}
         </nav>
 
         <div style={{ marginTop: 'auto', padding: '0 24px' }}>
@@ -127,14 +166,14 @@ export default function MainLayout({ children }: MainLayoutProps) {
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+          <Link to="/profile" style={{ display: 'flex', alignItems: 'center', gap: '16px', textDecoration: 'none' }}>
             <span style={{ fontFamily: 'var(--font-tech)', fontSize: '11px', fontWeight: 600, letterSpacing: '.15em', color: 'var(--text)' }}>
               {displayName}
             </span>
-            <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--emerald), rgba(16,185,129,0.4))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 600, color: '#fff', fontFamily: 'var(--font-tech)' }}>
+            <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--emerald), rgba(16,185,129,0.4))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 600, color: '#fff', fontFamily: 'var(--font-tech)', cursor: 'pointer' }}>
               {displayName.charAt(0)}
             </div>
-          </div>
+          </Link>
         </header>
 
         {/* Page Content */}

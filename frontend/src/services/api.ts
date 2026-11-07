@@ -73,6 +73,91 @@ export interface AnalyticsData {
   dailyActivity: DailyActivity[]
 }
 
+export interface PipelineStage {
+  id: string
+  name: string
+  status: 'success' | 'running' | 'failed' | 'queued' | 'skipped'
+  duration: string
+  logs?: string[]
+}
+
+export interface PipelineRun {
+  id: string
+  name: string
+  repo: string
+  repoFullName?: string
+  branch: string
+  commit: string
+  commitMessage: string
+  author: string
+  authorAvatar?: string
+  status: 'success' | 'running' | 'failed' | 'queued'
+  trigger: 'push' | 'pull_request' | 'manual' | 'schedule' | string
+  startedAt: string
+  duration: string
+  environment: string
+  stages: PipelineStage[]
+}
+
+export interface AnalysisPipelineStage {
+  step: string
+  id: string
+  name: string
+  description: string
+  status: 'pending' | 'running' | 'completed' | 'failed'
+  duration: string
+  logs: string[]
+  details?: Record<string, any>
+}
+
+export interface AnalysisPipelineMetrics {
+  totalFilesScanned: number
+  languagesDetected: number
+  functionsAnalyzed: number
+  dependenciesFound: number
+  securityIssues: number
+  pipelineDuration: string
+  pipelineStatus: 'Completed' | 'Running' | 'Failed' | 'Pending' | string
+}
+
+export interface RepoAnalysisPipelineData {
+  repository: {
+    id: number | string
+    name: string
+    fullName: string
+    url: string
+    branch: string
+    commit: string
+    commitMessage: string
+  }
+  metrics: AnalysisPipelineMetrics
+  stages: AnalysisPipelineStage[]
+  summaryTable?: Array<{
+    category: string
+    countQuantity: string
+    breakdown: string[]
+  }>
+  componentBreakdown?: Array<{
+    metric: string
+    frontend: string
+    backend: string
+    overall: string
+  }>
+  securityVulnerabilities?: Array<{
+    severity: string
+    issueType: string
+    description: string
+    target: string
+    risk: string
+  }>
+  projectDependencies?: Array<{
+    ecosystem: string
+    scope: string
+    packageCount: number
+    keyPackages: string
+  }>
+}
+
 export interface User {
   id: string
   name: string
@@ -100,7 +185,12 @@ async function api<T = any>(path: string, options: RequestInit = {}): Promise<T>
   const headers = { ...authHeaders((options.body as string | undefined) !== undefined), ...(options.headers || {}) }
   const res = await fetch(`${BASE_URL}${path}`, { ...options, headers })
   const json = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(json.message || `Request failed (${res.status})`)
+  if (!res.ok) {
+    const errorMsg = json.message || (res.status === 500 || res.status === 503
+      ? 'Backend service is unavailable. Please ensure the backend server is running on port 5000.'
+      : `Request failed (${res.status})`)
+    throw new Error(errorMsg)
+  }
   return json
 }
 
@@ -130,6 +220,44 @@ export async function fetchIssues(): Promise<Issue[]> {
 
 export async function fetchAnalytics(): Promise<AnalyticsData> {
   const json = await api('/analytics')
+  return json.data
+}
+
+export async function fetchPipelines(params?: { status?: string; repo?: string }): Promise<PipelineRun[]> {
+  const query = new URLSearchParams()
+  if (params?.status && params.status !== 'all') query.set('status', params.status)
+  if (params?.repo && params.repo !== 'all') query.set('repo', params.repo)
+  const qs = query.toString() ? `?${query.toString()}` : ''
+  const json = await api(`/pipelines${qs}`)
+  return Array.isArray(json.data) ? json.data : []
+}
+
+export async function triggerPipelineRun(data: { repo: string; branch?: string; workflow?: string; environment?: string }): Promise<PipelineRun> {
+  const json = await api('/pipelines/trigger', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
+  return json.data
+}
+
+export async function cancelPipelineRun(id: string): Promise<PipelineRun> {
+  const json = await api(`/pipelines/${id}/cancel`, {
+    method: 'POST'
+  })
+  return json.data
+}
+
+export async function fetchRepoAnalysisPipeline(repoId?: string | number): Promise<RepoAnalysisPipelineData> {
+  const query = repoId ? `?repoId=${encodeURIComponent(repoId)}` : ''
+  const json = await api(`/pipeline/repo-analysis${query}`)
+  return json.data
+}
+
+export async function runRepoAnalysisPipeline(repoId?: string | number): Promise<RepoAnalysisPipelineData> {
+  const json = await api('/pipeline/repo-analysis/run', {
+    method: 'POST',
+    body: JSON.stringify({ repoId })
+  })
   return json.data
 }
 
@@ -165,13 +293,14 @@ export async function updateUserProfile(data: { name: string }): Promise<User> {
   return json.user
 }
 
-export async function importRepository(data: { name: string }): Promise<Repository> {
+export async function importRepository(data: { name: string; language?: string; visibility?: string; githubToken?: string }): Promise<Repository> {
   const json = await api('/repositories/import', { method: 'POST', body: JSON.stringify(data) })
   return json.data
 }
 
-export async function fetchGitHubRepoInfo(owner: string, repo: string): Promise<any> {
-  const json = await api(`/repositories/github-info/${owner}/${repo}`)
+export async function fetchGitHubRepoInfo(owner: string, repo: string, token?: string): Promise<any> {
+  const query = token ? `?token=${encodeURIComponent(token)}` : ''
+  const json = await api(`/repositories/github-info/${owner}/${repo}${query}`)
   return json.data
 }
 
