@@ -191,9 +191,9 @@ export default function Pipeline() {
   const [isTriggerModalOpen, setIsTriggerModalOpen] = useState(false)
 
   // Trigger modal state
-  const [triggerRepo, setTriggerRepo] = useState('')
+  const [triggerRepo, setTriggerRepo] = useState('campus-lost-found')
   const [triggerBranch, setTriggerBranch] = useState('main')
-  const [triggerWorkflow, setTriggerWorkflow] = useState('production-release')
+  const [triggerWorkflow, setTriggerWorkflow] = useState('production-ci')
   const [triggerEnv, setTriggerEnv] = useState('production')
 
   const { data: pipelines = [], isLoading: isCicdLoading, refetch: refetchCicd, isFetching: isCicdFetching } = usePipelinesQuery()
@@ -1784,19 +1784,56 @@ export default function Pipeline() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '24px', margin: '0 0 6px 0' }}>Trigger Workflow</h2>
+            <p style={{ fontFamily: 'var(--font-tech)', fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 16px 0' }}>
+              Orchestrates 5-stage pipeline: simple-git import, package.json inspection, ESLint, Vitest, and Vite build.
+            </p>
             <form onSubmit={handleTriggerSubmit}>
-              <div style={{ margin: '16px 0' }}>
-                <label style={{ display: 'block', fontFamily: 'var(--font-tech)', fontSize: '12px', color: 'var(--text-muted)', marginBottom: 6 }}>Branch</label>
+              <div style={{ margin: '14px 0' }}>
+                <label style={{ display: 'block', fontFamily: 'var(--font-tech)', fontSize: '12px', color: 'var(--text-muted)', marginBottom: 6 }}>Repository</label>
                 <input
                   type="text"
-                  value={triggerBranch}
-                  onChange={(e) => setTriggerBranch(e.target.value)}
+                  value={triggerRepo}
+                  onChange={(e) => setTriggerRepo(e.target.value)}
+                  placeholder="e.g. campus-lost-found"
                   style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', color: 'var(--text)' }}
                 />
               </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-                <button type="button" onClick={() => setIsTriggerModalOpen(false)} style={{ padding: '8px 16px', borderRadius: '8px', background: 'none', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>Cancel</button>
-                <button type="submit" style={{ padding: '8px 18px', borderRadius: '8px', background: 'linear-gradient(135deg, #740c09, #590907)', border: '1px solid rgba(232,210,181,0.3)', color: '#E8D2B5', fontWeight: 600 }}>Execute</button>
+              <div style={{ margin: '14px 0' }}>
+                <label style={{ display: 'block', fontFamily: 'var(--font-tech)', fontSize: '12px', color: 'var(--text-muted)', marginBottom: 6 }}>Workflow</label>
+                <input
+                  type="text"
+                  value={triggerWorkflow}
+                  onChange={(e) => setTriggerWorkflow(e.target.value)}
+                  placeholder="production-ci"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', color: 'var(--text)' }}
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, margin: '14px 0' }}>
+                <div>
+                  <label style={{ display: 'block', fontFamily: 'var(--font-tech)', fontSize: '12px', color: 'var(--text-muted)', marginBottom: 6 }}>Branch</label>
+                  <input
+                    type="text"
+                    value={triggerBranch}
+                    onChange={(e) => setTriggerBranch(e.target.value)}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', color: 'var(--text)' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontFamily: 'var(--font-tech)', fontSize: '12px', color: 'var(--text-muted)', marginBottom: 6 }}>Environment</label>
+                  <select
+                    value={triggerEnv}
+                    onChange={(e) => setTriggerEnv(e.target.value)}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', background: '#181b1a', border: '1px solid var(--border)', color: 'var(--text)' }}
+                  >
+                    <option value="production">production</option>
+                    <option value="staging">staging</option>
+                    <option value="preview">preview</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
+                <button type="button" onClick={() => setIsTriggerModalOpen(false)} style={{ padding: '8px 16px', borderRadius: '8px', background: 'none', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancel</button>
+                <button type="submit" style={{ padding: '8px 18px', borderRadius: '8px', background: 'linear-gradient(135deg, #740c09, #590907)', border: '1px solid rgba(232,210,181,0.3)', color: '#E8D2B5', fontWeight: 600, cursor: 'pointer' }}>Execute Pipeline</button>
               </div>
             </form>
           </div>

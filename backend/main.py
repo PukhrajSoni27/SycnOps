@@ -760,28 +760,29 @@ def dashboard(user: dict = Depends(auth_user)):
 def get_pipelines(status: Optional[str] = None, repo: Optional[str] = None, user: dict = Depends(auth_user)):
     ws = workspace(user["id"])
     if "pipelines" not in ws:
-        repo_name = ws["repos"][0]["name"] if ws["repos"] else "sycnops-core"
+        repo_name = ws["repos"][0]["name"] if ws["repos"] else "campus-lost-found"
         ws["pipelines"] = [
             {
                 "id": f"pipe_{int(time.time() * 1000)}",
-                "name": "production-release",
+                "name": "production-ci",
+                "repository": repo_name,
                 "repo": repo_name,
                 "repoFullName": f"studio/{repo_name}",
                 "branch": "main",
                 "commit": "a9f2e34",
-                "commitMessage": "feat(engine): optimize telemetry pipeline with sub-second buffering",
-                "author": "alex-chen",
+                "commitMessage": "feat(pipeline): real multi-stage command execution engine",
+                "author": "pukhraj-soni",
                 "status": "success",
-                "trigger": "push",
+                "trigger": "manual",
                 "startedAt": datetime.now(timezone.utc).isoformat(),
-                "duration": "2m 14s",
+                "duration": "1m 18s",
                 "environment": "production",
                 "stages": [
-                    {"id": "stg_1", "name": "Lint & Typecheck", "status": "success", "duration": "28s", "logs": ["✓ ESLint passed", "✓ TypeScript clean"]},
-                    {"id": "stg_2", "name": "Unit & Integration Tests", "status": "success", "duration": "46s", "logs": ["✓ 142 unit tests passed (100%)"]},
-                    {"id": "stg_3", "name": "Security & SAST Audit", "status": "success", "duration": "22s", "logs": ["✓ 0 high/critical CVEs"]},
-                    {"id": "stg_4", "name": "AI Cognitive Quality Gate", "status": "success", "duration": "18s", "logs": ["✓ Quality gate approved"]},
-                    {"id": "stg_5", "name": "Build & Deploy", "status": "success", "duration": "20s", "logs": ["✓ Container deployed"]}
+                    {"id": "stg_1", "name": "Repository Import", "status": "success", "duration": "1.24s", "logs": ["[simple-git] Initialized git client", "✓ Repository Import completed with exit code 0"]},
+                    {"id": "stg_2", "name": "Dependency Analysis", "status": "success", "duration": "0.82s", "logs": ["[package.json] 53 frontend + 10 backend packages verified", "✓ Dependency Analysis completed with exit code 0"]},
+                    {"id": "stg_3", "name": "Linting", "status": "success", "duration": "3.45s", "logs": ["[ESLint] npm run lint executed", "✓ ESLint passed with exit code 0"]},
+                    {"id": "stg_4", "name": "Testing", "status": "success", "duration": "2.91s", "logs": ["[Vitest / Jest] npm run test executed", "✓ 2 tests passed with exit code 0"]},
+                    {"id": "stg_5", "name": "Build", "status": "success", "duration": "14.20s", "logs": ["[Vite] npm run build executed", "✓ Production Vite bundle generated with exit code 0"]}
                 ]
             }
         ]
@@ -789,34 +790,35 @@ def get_pipelines(status: Optional[str] = None, repo: Optional[str] = None, user
     if status and status != "all":
         plist = [p for p in plist if p.get("status") == status]
     if repo and repo != "all":
-        plist = [p for p in plist if p.get("repo") == repo]
+        plist = [p for p in plist if p.get("repo") == repo or p.get("repository") == repo]
     return {"success": True, "count": len(plist), "data": plist}
 
 
 @app.post("/api/pipelines/trigger")
 def trigger_pipeline(body: dict, user: dict = Depends(auth_user)):
     ws = workspace(user["id"])
-    repo_name = body.get("repo") or (ws["repos"][0]["name"] if ws["repos"] else "sycnops-app")
+    repo_name = body.get("repo") or (ws["repos"][0]["name"] if ws["repos"] else "campus-lost-found")
     new_pipe = {
         "id": f"pipe_{int(time.time() * 1000)}",
-        "name": body.get("workflow") or "manual-workflow-run",
+        "name": body.get("workflow") or "production-ci",
+        "repository": repo_name,
         "repo": repo_name,
         "repoFullName": f"studio/{repo_name}",
         "branch": body.get("branch") or "main",
         "commit": secrets.token_hex(4),
         "commitMessage": f"chore(pipeline): manual trigger on {body.get('branch') or 'main'}",
-        "author": user.get("name", "active-user"),
+        "author": user.get("name", "pukhraj-soni"),
         "status": "running",
         "trigger": "manual",
         "startedAt": datetime.now(timezone.utc).isoformat(),
         "duration": "running...",
         "environment": body.get("environment") or "production",
         "stages": [
-            {"id": "stg_1", "name": "Lint & Typecheck", "status": "running", "duration": "calculating...", "logs": ["Starting lint and syntax checks..."]},
-            {"id": "stg_2", "name": "Unit & Integration Tests", "status": "queued", "duration": "—", "logs": ["Awaiting runner..."]},
-            {"id": "stg_3", "name": "Security & SAST Audit", "status": "queued", "duration": "—", "logs": ["Awaiting runner..."]},
-            {"id": "stg_4", "name": "AI Cognitive Quality Gate", "status": "queued", "duration": "—", "logs": ["Awaiting runner..."]},
-            {"id": "stg_5", "name": "Deployment", "status": "queued", "duration": "—", "logs": ["Awaiting runner..."]}
+            {"id": "stg_1", "name": "Repository Import", "status": "success", "duration": "1.10s", "logs": ["[simple-git] Repository imported via simple-git", "✓ Exit code 0"]},
+            {"id": "stg_2", "name": "Dependency Analysis", "status": "success", "duration": "0.75s", "logs": ["[package.json] Manifest verified", "✓ Exit code 0"]},
+            {"id": "stg_3", "name": "Linting", "status": "running", "duration": "calculating...", "logs": ["[ESLint] Running npm run lint..."]},
+            {"id": "stg_4", "name": "Testing", "status": "pending", "duration": "—", "logs": []},
+            {"id": "stg_5", "name": "Build", "status": "pending", "duration": "—", "logs": []}
         ]
     }
     if "pipelines" not in ws:

@@ -19,6 +19,12 @@ import {
   calculateRepositoryPipeline
 } from './lib/github.js'
 import { initFirebase, getDB, isFirestoreConnected } from './config/firebase.js'
+import {
+  createPipelineExecutionRecord,
+  executePipeline,
+  cancelPipeline,
+  syncPipelineToFirestore
+} from './lib/pipelineOrchestrator.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: path.join(__dirname, 'backend.env') })
@@ -109,98 +115,163 @@ async function updateUser(id, data) {
 }
 
 function getDefaultPipelines(repos) {
-  const repoName = repos[0]?.name || 'sycnops-core'
-  const repoFull = repos[0]?.fullName || 'studio/sycnops-core'
+  const repoName = repos[0]?.name || 'campus-lost-found'
+  const repoFull = repos[0]?.fullName || 'studio/campus-lost-found'
   const now = Date.now()
 
   return [
     {
       id: 'pipe_' + (now - 120000),
-      name: 'production-release',
+      name: 'production-ci',
+      repository: repoName,
       repo: repoName,
       repoFullName: repoFull,
       branch: 'main',
       commit: 'a9f2e34',
-      commitMessage: 'feat(engine): optimize telemetry pipeline with sub-second buffering',
-      author: 'alex-chen',
-      authorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=64&h=64&fit=crop&crop=face',
+      commitMessage: 'feat(pipeline): real multi-stage command execution engine',
+      author: 'pukhraj-soni',
+      authorAvatar: '',
       status: 'success',
-      trigger: 'push',
+      trigger: 'manual',
       startedAt: new Date(now - 1200000).toISOString(),
-      duration: '2m 14s',
+      duration: '1m 18s',
       environment: 'production',
+      exitCode: 0,
       stages: [
-        { id: 'stg_1', name: 'Lint & Typecheck', status: 'success', duration: '28s', logs: ['✓ ESLint passed with 0 warnings', '✓ TypeScript typecheck clean', '✓ Formatting verified with Prettier'] },
-        { id: 'stg_2', name: 'Unit & Integration Tests', status: 'success', duration: '46s', logs: ['✓ 142 unit tests passed (100%)', '✓ 28 integration specs executed', '✓ Coverage: 94.2% statements'] },
-        { id: 'stg_3', name: 'Security & SAST Audit', status: 'success', duration: '22s', logs: ['✓ 0 high/critical CVE vulnerabilities', '✓ Secret scanner: 0 tokens leaked', '✓ SOC2 RBAC checks validated'] },
-        { id: 'stg_4', name: 'AI Cognitive Quality Gate', status: 'success', duration: '18s', logs: ['✓ Complexity score: 1.2 (Low risk)', '✓ Architecture compliance: 98/100', '✓ AI review: No regression detected'] },
-        { id: 'stg_5', name: 'Build & Deploy', status: 'success', duration: '20s', logs: ['✓ Multi-stage Docker image built (42MB)', '✓ Deployed to k8s cluster: prod-us-east', '✓ Health check returned 200 OK'] }
+        {
+          id: 'stg_1',
+          name: 'Repository Import',
+          status: 'success',
+          duration: '1.24s',
+          exitCode: 0,
+          logs: [
+            `[simple-git] Initializing git inspection for target: ${repoName}`,
+            `[simple-git] Working tree: checked out branch main`,
+            `[simple-git] HEAD commit: a9f2e34 (feat(pipeline): real multi-stage command execution engine)`,
+            `✓ Repository Import stage completed successfully with exit code 0`
+          ]
+        },
+        {
+          id: 'stg_2',
+          name: 'Dependency Analysis',
+          status: 'success',
+          duration: '0.82s',
+          exitCode: 0,
+          logs: [
+            '[Dependency Inspector] Reading package manifests (package.json)...',
+            '[Dependency Inspector] Frontend dependencies: 53 packages (react, vite, tailwindcss)',
+            '[Dependency Inspector] Backend dependencies: 10 packages (express, simple-git, firebase-admin)',
+            '✓ Dependency Analysis completed with exit code 0'
+          ]
+        },
+        {
+          id: 'stg_3',
+          name: 'Linting',
+          status: 'success',
+          duration: '3.45s',
+          exitCode: 0,
+          logs: [
+            '[ESLint] Executing: npm run lint',
+            '> syncops-ai@1.0.0 lint',
+            '> eslint .',
+            '✓ ESLint validation passed with exit code 0'
+          ]
+        },
+        {
+          id: 'stg_4',
+          name: 'Testing',
+          status: 'success',
+          duration: '2.91s',
+          exitCode: 0,
+          logs: [
+            '[Vitest / Jest] Executing: npm run test',
+            '> vitest run',
+            '✓ src/tests/pipeline.test.ts (2 passed)',
+            '✓ Automated testing completed successfully with exit code 0'
+          ]
+        },
+        {
+          id: 'stg_5',
+          name: 'Build',
+          status: 'success',
+          duration: '14.20s',
+          exitCode: 0,
+          logs: [
+            '[Vite] Executing: npm run build',
+            '> tsc && vite build',
+            '✓ built in 13.8s',
+            '✓ Production Vite bundle generated successfully with exit code 0'
+          ]
+        }
       ]
     },
     {
       id: 'pipe_' + (now - 3600000),
       name: 'ci-pr-validation',
-      repo: repoName,
-      repoFullName: repoFull,
-      branch: 'feature/auth-pipeline',
+      repository: 'campus-lost-found',
+      repo: 'campus-lost-found',
+      repoFullName: 'studio/campus-lost-found',
+      branch: 'feature/lost-item-filter',
       commit: '7b3c19d',
-      commitMessage: 'fix(auth): handle Firebase popup token exchange gracefully',
+      commitMessage: 'feat(lost-found): add category and location filtering',
       author: 'pukhraj-soni',
-      authorAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=64&h=64&fit=crop&crop=face',
+      authorAvatar: '',
       status: 'running',
       trigger: 'pull_request',
       startedAt: new Date(now - 90000).toISOString(),
-      duration: '1m 30s',
+      duration: '45s',
       environment: 'preview',
+      exitCode: null,
       stages: [
-        { id: 'stg_1', name: 'Lint & Typecheck', status: 'success', duration: '24s', logs: ['✓ ESLint verified', '✓ TypeScript --noEmit passed'] },
-        { id: 'stg_2', name: 'Unit & Integration Tests', status: 'success', duration: '42s', logs: ['✓ 138 unit tests passed', '✓ Auth specs verified'] },
-        { id: 'stg_3', name: 'Security & SAST Audit', status: 'running', duration: '24s', logs: ['Scanning dependencies for vulnerabilities...', 'Auditing JWT signature algorithms...', 'Verifying OAuth provider scopes...'] },
-        { id: 'stg_4', name: 'AI Cognitive Quality Gate', status: 'queued', duration: '—', logs: ['Queued for SycnOps AI review...'] },
-        { id: 'stg_5', name: 'Preview Environment', status: 'queued', duration: '—', logs: ['Awaiting stage completion...'] }
-      ]
-    },
-    {
-      id: 'pipe_' + (now - 7200000),
-      name: 'nightly-security-scan',
-      repo: repoName,
-      repoFullName: repoFull,
-      branch: 'main',
-      commit: 'e45b81a',
-      commitMessage: 'chore(deps): bump cryptographic hashing dependencies',
-      author: 'sycnops-bot',
-      authorAvatar: '',
-      status: 'success',
-      trigger: 'schedule',
-      startedAt: new Date(now - 7200000).toISOString(),
-      duration: '1m 08s',
-      environment: 'production',
-      stages: [
-        { id: 'stg_1', name: 'Dependency Vulnerability Audit', status: 'success', duration: '32s', logs: ['✓ Checked 1,280 packages', '✓ 0 known vulnerabilities found'] },
-        { id: 'stg_2', name: 'Static Code Analysis (SAST)', status: 'success', duration: '21s', logs: ['✓ AST security inspection complete', '✓ No buffer overflows or SQLi risks'] },
-        { id: 'stg_3', name: 'Secret & Credential Scan', status: 'success', duration: '15s', logs: ['✓ Scanned 482 commits', '✓ No private keys or tokens exposed'] }
-      ]
-    },
-    {
-      id: 'pipe_' + (now - 14400000),
-      name: 'staging-e2e-matrix',
-      repo: repoName,
-      repoFullName: repoFull,
-      branch: 'develop',
-      commit: 'c219f08',
-      commitMessage: 'test(e2e): add end-to-end repository synchronization suites',
-      author: 'elena-rostova',
-      authorAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=64&h=64&fit=crop&crop=face',
-      status: 'failed',
-      trigger: 'push',
-      startedAt: new Date(now - 14400000).toISOString(),
-      duration: '3m 42s',
-      environment: 'staging',
-      stages: [
-        { id: 'stg_1', name: 'Lint & Typecheck', status: 'success', duration: '25s', logs: ['✓ Linting complete'] },
-        { id: 'stg_2', name: 'Unit Tests', status: 'success', duration: '50s', logs: ['✓ 142 tests passed'] },
-        { id: 'stg_3', name: 'E2E Cypress Matrix', status: 'failed', duration: '2m 27s', logs: ['Running browser test suite...', 'Test failed at: Repository Import timeout after 10000ms', 'Error: Expected element .s-panel to be visible within timeout.'] },
-        { id: 'stg_4', name: 'Staging Deploy', status: 'skipped', duration: '0s', logs: ['Skipped due to upstream stage failure.'] }
+        {
+          id: 'stg_1',
+          name: 'Repository Import',
+          status: 'success',
+          duration: '1.10s',
+          exitCode: 0,
+          logs: [
+            '[simple-git] Checked out branch feature/lost-item-filter',
+            '✓ Repository Import completed with exit code 0'
+          ]
+        },
+        {
+          id: 'stg_2',
+          name: 'Dependency Analysis',
+          status: 'success',
+          duration: '0.75s',
+          exitCode: 0,
+          logs: [
+            '[Dependency Inspector] Package manifest inspected: 63 total packages',
+            '✓ Dependency Analysis completed with exit code 0'
+          ]
+        },
+        {
+          id: 'stg_3',
+          name: 'Linting',
+          status: 'running',
+          duration: 'calculating...',
+          exitCode: null,
+          logs: [
+            '[ESLint] Running npm run lint...',
+            'Auditing components for AST syntax and styling rules...'
+          ]
+        },
+        {
+          id: 'stg_4',
+          name: 'Testing',
+          status: 'pending',
+          duration: '—',
+          exitCode: null,
+          logs: []
+        },
+        {
+          id: 'stg_5',
+          name: 'Build',
+          status: 'pending',
+          duration: '—',
+          exitCode: null,
+          logs: []
+        }
       ]
     }
   ]
@@ -216,6 +287,20 @@ function workspace(userId) {
   if (ws.repos.length === 0) {
     ws.repos.push({
       id: 1,
+      name: 'campus-lost-found',
+      fullName: 'studio/campus-lost-found',
+      description: 'Campus Lost and Found tracker and reporting application',
+      language: 'TypeScript',
+      visibility: 'public',
+      defaultBranch: 'main',
+      stars: 18,
+      forks: 4,
+      openIssues: 1,
+      source: 'manual',
+      importedAt: new Date().toISOString()
+    })
+    ws.repos.push({
+      id: 2,
       name: 'sycnops-core',
       fullName: 'studio/sycnops-core',
       description: 'SycnOps AI developer workflow platform core repository',
@@ -745,16 +830,41 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
 })
 
 // ── Pipelines (CI/CD Workflows) ───────────────────────────
-app.get('/api/pipelines', requireAuth, (req, res) => {
+app.get('/api/pipelines', requireAuth, async (req, res) => {
   try {
     const ws = workspace(req.auth.id)
     let list = ws.pipelines || []
+
+    // If Firebase Firestore is connected, load recorded pipeline runs
+    if (isFirestoreConnected()) {
+      try {
+        const db = getDB()
+        const snap = await db.collection('pipeline_runs').orderBy('startedAt', 'desc').limit(50).get()
+        if (!snap.empty) {
+          const fromDb = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+          const existingIds = new Set(list.map((p) => p.id))
+          for (const item of fromDb) {
+            if (!existingIds.has(item.id)) {
+              list.push(item)
+              existingIds.add(item.id)
+            } else {
+              // Update status and stages in memory cache
+              const idx = list.findIndex((p) => p.id === item.id)
+              if (idx !== -1) list[idx] = { ...list[idx], ...item }
+            }
+          }
+        }
+      } catch (e) {
+        // Fallback to in-memory workspace
+      }
+    }
+
     const { status, repo, environment } = req.query || {}
     if (status && status !== 'all') {
       list = list.filter((p) => p.status === status)
     }
     if (repo && repo !== 'all') {
-      list = list.filter((p) => p.repo === repo || p.repoFullName === repo)
+      list = list.filter((p) => p.repo === repo || p.repoFullName === repo || p.repository === repo)
     }
     if (environment && environment !== 'all') {
       list = list.filter((p) => p.environment === environment)
@@ -765,73 +875,75 @@ app.get('/api/pipelines', requireAuth, (req, res) => {
   }
 })
 
-app.post('/api/pipelines/trigger', requireAuth, (req, res) => {
+app.get('/api/pipelines/:id', requireAuth, async (req, res) => {
   try {
     const ws = workspace(req.auth.id)
-    const { repo, branch, workflow, environment } = req.body || {}
-    const selectedRepo = ws.repos.find((r) => r.name === repo || r.fullName === repo) || ws.repos[0]
-    const repoName = selectedRepo?.name || repo || 'sycnops-app'
-    const repoFullName = selectedRepo?.fullName || `studio/${repoName}`
-    const now = Date.now()
-    const commitHash = Math.random().toString(16).substring(2, 9)
+    let pipeline = (ws.pipelines || []).find((p) => p.id === req.params.id)
 
-    const newPipeline = {
-      id: 'pipe_' + now,
-      name: workflow || 'manual-workflow-run',
-      repo: repoName,
-      repoFullName,
-      branch: branch || 'main',
-      commit: commitHash,
-      commitMessage: `chore(pipeline): manual trigger on ${branch || 'main'}`,
-      author: 'active-user',
-      authorAvatar: '',
-      status: 'running',
-      trigger: 'manual',
-      startedAt: new Date().toISOString(),
-      duration: 'running...',
-      environment: environment || 'production',
-      stages: [
-        { id: 'stg_1', name: 'Lint & Typecheck', status: 'running', duration: 'calculating...', logs: ['Starting linter and TypeScript analyzer...', 'Running eslint . --max-warnings 0'] },
-        { id: 'stg_2', name: 'Unit & Integration Tests', status: 'queued', duration: '—', logs: ['Waiting for previous stage...'] },
-        { id: 'stg_3', name: 'Security & SAST Audit', status: 'queued', duration: '—', logs: ['Waiting for previous stage...'] },
-        { id: 'stg_4', name: 'AI Cognitive Quality Gate', status: 'queued', duration: '—', logs: ['Waiting for previous stage...'] },
-        { id: 'stg_5', name: 'Deployment', status: 'queued', duration: '—', logs: ['Waiting for previous stage...'] }
-      ]
+    if (!pipeline && isFirestoreConnected()) {
+      try {
+        const db = getDB()
+        const doc = await db.collection('pipeline_runs').doc(req.params.id).get()
+        if (doc.exists) pipeline = { id: doc.id, ...doc.data() }
+      } catch {}
     }
 
-    if (!ws.pipelines) ws.pipelines = []
-    ws.pipelines.unshift(newPipeline)
-
-    // Simulate completion after 10 seconds
-    setTimeout(() => {
-      newPipeline.status = 'success'
-      newPipeline.duration = '1m 24s'
-      newPipeline.stages.forEach((stg) => {
-        stg.status = 'success'
-        if (stg.duration === 'calculating...' || stg.duration === '—') stg.duration = '16s'
-        stg.logs.push('✓ Stage completed with exit code 0')
-      })
-    }, 10000)
-
-    return res.status(201).json({ success: true, message: 'Pipeline triggered successfully.', data: newPipeline })
+    if (!pipeline) return res.status(404).json({ success: false, message: 'Pipeline run not found' })
+    return res.json({ success: true, data: pipeline })
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message })
   }
 })
 
-app.post('/api/pipelines/:id/cancel', requireAuth, (req, res) => {
+app.post('/api/pipelines/trigger', requireAuth, async (req, res) => {
+  try {
+    const ws = workspace(req.auth.id)
+    const { repo, branch, workflow, environment } = req.body || {}
+    const selectedRepo = ws.repos.find((r) => r.name === repo || r.fullName === repo) || ws.repos[0]
+    const repoName = selectedRepo?.name || repo || 'campus-lost-found'
+    const repoFullName = selectedRepo?.fullName || `studio/${repoName}`
+
+    // Create execution record conforming to user's specification
+    const newPipeline = createPipelineExecutionRecord({
+      repo: repoName,
+      repoFullName,
+      branch: branch || 'main',
+      workflow: workflow || 'production-ci',
+      environment: environment || 'production',
+      author: req.auth.name || 'operator'
+    })
+
+    if (!ws.pipelines) ws.pipelines = []
+    ws.pipelines.unshift(newPipeline)
+
+    // Save initial record to Firebase Firestore
+    await syncPipelineToFirestore(newPipeline)
+
+    // Asynchronously orchestrate real command execution (Node.js engine)
+    executePipeline(newPipeline, (updated) => {
+      const idx = ws.pipelines.findIndex((p) => p.id === updated.id)
+      if (idx !== -1) ws.pipelines[idx] = updated
+    }).catch((err) => {
+      console.error(`Pipeline ${newPipeline.id} execution error:`, err)
+    })
+
+    return res.status(201).json({
+      success: true,
+      message: 'Pipeline triggered and orchestrated with real command execution.',
+      data: newPipeline
+    })
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message })
+  }
+})
+
+app.post('/api/pipelines/:id/cancel', requireAuth, async (req, res) => {
   try {
     const ws = workspace(req.auth.id)
     const pipeline = (ws.pipelines || []).find((p) => p.id === req.params.id)
     if (!pipeline) return res.status(404).json({ success: false, message: 'Pipeline run not found.' })
-    pipeline.status = 'failed'
-    pipeline.duration += ' (cancelled)'
-    pipeline.stages.forEach((s) => {
-      if (s.status === 'running' || s.status === 'queued') {
-        s.status = 'skipped'
-        s.logs.push('⚠️ Cancelled by operator.')
-      }
-    })
+
+    await cancelPipeline(pipeline)
     return res.json({ success: true, message: 'Pipeline run cancelled.', data: pipeline })
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message })
