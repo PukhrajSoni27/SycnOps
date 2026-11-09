@@ -307,3 +307,52 @@ export async function fetchGitHubRepoInfo(owner: string, repo: string, token?: s
 export async function apiGet(path: string) {
   return api(path)
 }
+
+export interface CodeFlowNode {
+  id: string
+  stepNumber: number
+  name: string
+  type: string
+  category: string
+  filePath: string
+  line: number
+  params: string[]
+  calls: string[]
+  calledBy: string[]
+  apiEndpoint: string
+  dbOperation: string
+  branchConditions: string[]
+  errorHandling: string
+  summary: string
+  codeSnippet: string
+}
+
+export interface CodeFlowOperation {
+  id: string
+  title: string
+  repository: string
+  description: string
+  trigger: string
+  apiEndpoint: string
+  databaseOperation: string
+  totalSteps: number
+  nodes: CodeFlowNode[]
+}
+
+export async function fetchCodeFlowOperations(): Promise<CodeFlowOperation[]> {
+  const json = await api('/code-flow/operations')
+  return json.data || []
+}
+
+export async function fetchCodeFlowTrace(operation = 'report-lost-item'): Promise<CodeFlowOperation> {
+  const json = await api(`/code-flow/trace?operation=${encodeURIComponent(operation)}`)
+  return json.data
+}
+
+export async function analyzeFileAST(code?: string, filePath?: string): Promise<any> {
+  const json = await api('/code-flow/analyze-file', {
+    method: 'POST',
+    body: JSON.stringify({ code, filePath })
+  })
+  return json.data
+}

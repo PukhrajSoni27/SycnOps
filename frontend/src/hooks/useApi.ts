@@ -9,7 +9,10 @@ import {
   triggerPipelineRun,
   cancelPipelineRun,
   fetchRepoAnalysisPipeline,
-  runRepoAnalysisPipeline
+  runRepoAnalysisPipeline,
+  fetchCodeFlowOperations,
+  fetchCodeFlowTrace,
+  analyzeFileAST
 } from '@/services/api'
 
 export function useRepositoriesQuery() {
@@ -88,6 +91,27 @@ export function useImportRepositoryMutation() {
       queryClient.invalidateQueries({ queryKey: ['pipelines'] })
       queryClient.invalidateQueries({ queryKey: ['repo-analysis-pipeline'] })
     }
+  })
+}
+
+export function useCodeFlowOperationsQuery() {
+  return useQuery({
+    queryKey: ['code-flow-operations'],
+    queryFn: fetchCodeFlowOperations
+  })
+}
+
+export function useCodeFlowTraceQuery(operationId: string) {
+  return useQuery({
+    queryKey: ['code-flow-trace', operationId],
+    queryFn: () => fetchCodeFlowTrace(operationId),
+    enabled: Boolean(operationId)
+  })
+}
+
+export function useAnalyzeFileASTMutation() {
+  return useMutation({
+    mutationFn: (data: { code?: string; filePath?: string }) => analyzeFileAST(data.code, data.filePath)
   })
 }
 
