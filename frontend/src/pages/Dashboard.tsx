@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   GitPullRequest, GitCommit, AlertCircle, ArrowUpRight,
   Plus, BarChart3, Star, GitFork, ExternalLink, ShieldCheck,
-  Sparkles, Layers, Activity
+  Sparkles, Layers, Activity, Workflow
 } from 'lucide-react'
 import { fetchDashboard } from '@/services/api'
 import { useRepositoriesQuery, usePullRequestsQuery, useIssuesQuery, useAnalyticsQuery } from '@/hooks/useApi'
@@ -63,6 +63,23 @@ export default function Dashboard() {
           >
             <Activity style={{ width: 14, height: 14, color: '#E8D2B5' }} />
             Pipeline
+          </Link>
+
+          <Link
+            to="/code-flow"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '10px 18px', borderRadius: 10,
+              background: 'linear-gradient(135deg, rgba(89,9,7,0.7), rgba(89,9,7,0.35))',
+              border: '1px solid rgba(232,210,181,0.35)',
+              color: '#E8D2B5', fontFamily: 'var(--font-tech)', fontSize: '12px',
+              fontWeight: 600, letterSpacing: '0.05em', textDecoration: 'none',
+              boxShadow: '0 4px 12px rgba(89,9,7,0.35)',
+              transition: 'all 0.2s'
+            }}
+          >
+            <Workflow style={{ width: 14, height: 14, color: '#E8D2B5' }} />
+            Code Flow
           </Link>
 
           <Link

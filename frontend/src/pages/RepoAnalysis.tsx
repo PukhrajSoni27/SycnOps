@@ -5,7 +5,7 @@ import {
   ArrowLeft, ExternalLink, Shield, AlertTriangle, Bug, Zap, BookOpen,
   GitBranch, GitPullRequest, Users, Clock, Star, GitFork, Package,
   Activity, TrendingUp, CheckCircle, XCircle, AlertCircle, Tag,
-  Lock, Globe, Loader2, Download
+  Lock, Globe, Loader2, Download, Workflow
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -571,6 +571,31 @@ export default function RepoAnalysis() {
             >
               <Activity size={14} color="#E8D2B5" />
               View Pipeline
+            </Link>
+
+            {/* Code Flow Button */}
+            <Link
+              to={`/code-flow?repoId=${repoId}`}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 18px',
+                background: 'linear-gradient(135deg, rgba(89,9,7,0.7), rgba(89,9,7,0.35))',
+                border: '1px solid rgba(232,210,181,0.35)',
+                borderRadius: 10,
+                color: '#E8D2B5',
+                fontFamily: 'var(--font-tech)',
+                fontSize: 11,
+                letterSpacing: '.1em',
+                textTransform: 'uppercase',
+                textDecoration: 'none',
+                fontWeight: 600,
+                boxShadow: '0 4px 14px rgba(89,9,7,0.35)',
+                transition: 'all .2s',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <Workflow size={14} color="#E8D2B5" />
+              Code Flow
             </Link>
 
             {/* Download Report Button */}

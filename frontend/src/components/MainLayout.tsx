@@ -15,6 +15,7 @@ const navigation: NavItem[] = [
   { name: 'Analytics', href: '/analytics' },
   { name: 'Profile', href: '/profile' },
   { name: 'Pipeline', href: '/pipeline' },
+  { name: 'Code Flow', href: '/code-flow' },
 ]
 
 interface MainLayoutProps {
@@ -94,13 +95,15 @@ export default function MainLayout({ children }: MainLayoutProps) {
           {navigation.map((item) => {
             const isActive = location.pathname === item.href || (item.href !== '/dashboard' && location.pathname.startsWith(item.href))
             const isPipeline = item.name === 'Pipeline'
+            const isCodeFlow = item.name === 'Code Flow'
+            const isCustomThemed = isPipeline || isCodeFlow
             return (
               <Link
                 key={item.name}
                 to={item.href}
-                className={`s-sidebar__link ${isActive ? 'is-active' : ''} ${isPipeline ? 'is-pipeline' : ''}`}
+                className={`s-sidebar__link ${isActive ? 'is-active' : ''} ${isPipeline ? 'is-pipeline' : ''} ${isCodeFlow ? 'is-code-flow' : ''}`}
                 style={
-                  isPipeline
+                  isCustomThemed
                     ? {
                         color: '#E8D2B5',
                         ...(isActive
@@ -134,6 +137,26 @@ export default function MainLayout({ children }: MainLayoutProps) {
                     }}
                   >
                     CI/CD
+                  </span>
+                )}
+                {isCodeFlow && (
+                  <span
+                    style={{
+                      marginLeft: 'auto',
+                      fontSize: '9px',
+                      fontFamily: 'var(--font-tech)',
+                      letterSpacing: '0.12em',
+                      textTransform: 'uppercase',
+                      padding: '2px 7px',
+                      borderRadius: '999px',
+                      backgroundColor: isActive ? '#590907' : 'rgba(89, 9, 7, 0.45)',
+                      border: '1px solid rgba(232, 210, 181, 0.35)',
+                      color: '#E8D2B5',
+                      fontWeight: 600,
+                      boxShadow: '0 2px 8px rgba(89, 9, 7, 0.5)',
+                    }}
+                  >
+                    FLOW
                   </span>
                 )}
               </Link>

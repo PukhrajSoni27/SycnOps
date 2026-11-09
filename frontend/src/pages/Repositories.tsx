@@ -281,24 +281,46 @@ export default function Repositories() {
                   <td className="s-work__td s-work__status s-work__status--active" style={{ paddingRight: '32px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span>SYNCED</span>
-                      <Link
-                        to={`/pipeline?repoId=${repo.id}`}
-                        style={{
-                          fontSize: '9px',
-                          fontFamily: 'var(--font-mono)',
-                          padding: '3px 8px',
-                          borderRadius: '6px',
-                          background: 'linear-gradient(135deg, rgba(89,9,7,0.7), rgba(89,9,7,0.35))',
-                          color: '#E8D2B5',
-                          border: '1px solid rgba(232,210,181,0.3)',
-                          letterSpacing: '0.08em',
-                          textTransform: 'uppercase',
-                          fontWeight: 600,
-                          textDecoration: 'none'
-                        }}
-                      >
-                        PIPELINE
-                      </Link>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <Link
+                          to={`/pipeline?repoId=${repo.id}`}
+                          style={{
+                            fontSize: '9px',
+                            fontFamily: 'var(--font-mono)',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            background: 'linear-gradient(135deg, rgba(89,9,7,0.7), rgba(89,9,7,0.35))',
+                            color: '#E8D2B5',
+                            border: '1px solid rgba(232,210,181,0.3)',
+                            letterSpacing: '0.08em',
+                            textTransform: 'uppercase',
+                            fontWeight: 600,
+                            textDecoration: 'none',
+                            textAlign: 'center'
+                          }}
+                        >
+                          PIPELINE
+                        </Link>
+                        <Link
+                          to={`/code-flow?repoId=${repo.id}`}
+                          style={{
+                            fontSize: '9px',
+                            fontFamily: 'var(--font-mono)',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            background: 'linear-gradient(135deg, rgba(89,9,7,0.7), rgba(89,9,7,0.35))',
+                            color: '#E8D2B5',
+                            border: '1px solid rgba(232,210,181,0.3)',
+                            letterSpacing: '0.08em',
+                            textTransform: 'uppercase',
+                            fontWeight: 600,
+                            textDecoration: 'none',
+                            textAlign: 'center'
+                          }}
+                        >
+                          CODE FLOW
+                        </Link>
+                      </div>
                       {repo.source === 'github' && (
                         <Link
                           to={`/repositories/${repo.id}/analysis`}
