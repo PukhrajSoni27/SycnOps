@@ -5,6 +5,7 @@ import {
   fetchIssues,
   fetchAnalytics,
   importRepository,
+  deleteRepository,
   fetchPipelines,
   triggerPipelineRun,
   cancelPipelineRun,
@@ -12,7 +13,12 @@ import {
   runRepoAnalysisPipeline,
   fetchCodeFlowOperations,
   fetchCodeFlowTrace,
-  analyzeFileAST
+  analyzeFileAST,
+  scanFileFlow,
+  fetchFileFlowGraph,
+  fetchFileFlowFiles,
+  fetchFileDetails,
+  fetchFileFlowPaths
 } from '@/services/api'
 
 export function useRepositoriesQuery() {
@@ -94,6 +100,22 @@ export function useImportRepositoryMutation() {
   })
 }
 
+export function useDeleteRepositoryMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number | string) => deleteRepository(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['repositories'] })
+      queryClient.invalidateQueries({ queryKey: ['pull-requests'] })
+      queryClient.invalidateQueries({ queryKey: ['issues'] })
+      queryClient.invalidateQueries({ queryKey: ['analytics'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['pipelines'] })
+      queryClient.invalidateQueries({ queryKey: ['repo-analysis-pipeline'] })
+    }
+  })
+}
+
 export function useCodeFlowOperationsQuery() {
   return useQuery({
     queryKey: ['code-flow-operations'],
@@ -112,6 +134,50 @@ export function useCodeFlowTraceQuery(operationId: string) {
 export function useAnalyzeFileASTMutation() {
   return useMutation({
     mutationFn: (data: { code?: string; filePath?: string }) => analyzeFileAST(data.code, data.filePath)
+  })
+}
+
+// ── File Flow Architecture Hooks ──────────────────────────────
+
+export function useFileFlowGraphQuery(projectId = 'sycnops') {
+  return useQuery({
+    queryKey: ['file-flow-graph', projectId],
+    queryFn: () => fetchFileFlowGraph(projectId),
+    staleTime: 60000
+  })
+}
+
+export function useFileFlowFilesQuery(projectId = 'sycnops') {
+  return useQuery({
+    queryKey: ['file-flow-files', projectId],
+    queryFn: () => fetchFileFlowFiles(projectId)
+  })
+}
+
+export function useFileDetailsQuery(filePath: string | null) {
+  return useQuery({
+    queryKey: ['file-flow-details', filePath],
+    queryFn: () => (filePath ? fetchFileDetails(filePath) : null),
+    enabled: Boolean(filePath)
+  })
+}
+
+export function useScanFileFlowMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (projectId?: string) => scanFileFlow(projectId || 'sycnops'),
+    onSuccess: (_, projectId) => {
+      queryClient.invalidateQueries({ queryKey: ['file-flow-graph', projectId || 'sycnops'] })
+      queryClient.invalidateQueries({ queryKey: ['file-flow-files', projectId || 'sycnops'] })
+    }
+  })
+}
+
+export function useFileFlowPathsQuery(source: string | null, target: string | null, projectId = 'sycnops') {
+  return useQuery({
+    queryKey: ['file-flow-paths', source, target, projectId],
+    queryFn: () => (source && target ? fetchFileFlowPaths(source, target, projectId) : []),
+    enabled: Boolean(source && target)
   })
 }
 

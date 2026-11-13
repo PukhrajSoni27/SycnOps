@@ -25,6 +25,12 @@ import {
   cancelPipeline,
   syncPipelineToFirestore
 } from './lib/pipelineOrchestrator.js'
+import {
+  runFileFlowScan,
+  getLatestFileFlowAnalysis,
+  getFileDetails,
+  findGraphPaths
+} from './lib/fileFlowScanner.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: path.join(__dirname, 'backend.env') })
@@ -688,13 +694,38 @@ app.get('/api/repositories/:id/analysis', requireAuth, async (req, res) => {
   }
 })
 
-app.delete('/api/repositories/:id', requireAuth, (req, res) => {
-  const ws = workspace(req.auth.id)
-  const before = ws.repos.length
-  const id = Number(req.params.id)
-  ws.repos = ws.repos.filter((r) => r.id !== id && r.name !== req.params.id && r.fullName !== req.params.id)
-  if (ws.repos.length === before) return res.status(404).json({ success: false, message: 'Repository not found.' })
-  return res.json({ success: true, message: 'Repository removed.' })
+app.delete('/api/repositories/:id', requireAuth, async (req, res) => {
+  try {
+    const ws = workspace(req.auth.id)
+    const before = ws.repos.length
+    const id = Number(req.params.id)
+    const removedRepo = ws.repos.find((r) => r.id === id || r.name === req.params.id || r.fullName === req.params.id)
+
+    ws.repos = ws.repos.filter((r) => r.id !== id && r.name !== req.params.id && r.fullName !== req.params.id)
+
+    // Also remove from Firebase Firestore
+    if (isFirestoreConnected()) {
+      try {
+        const db = getDB()
+        if (db) {
+          await db.collection('repositories').doc(String(req.params.id)).delete().catch(() => {})
+          if (removedRepo?.fullName) {
+            const snap = await db.collection('repositories').where('fullName', '==', removedRepo.fullName).get().catch(() => null)
+            if (snap && !snap.empty) {
+              for (const doc of snap.docs) {
+                await doc.ref.delete().catch(() => {})
+              }
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (ws.repos.length === before) return res.status(404).json({ success: false, message: 'Repository not found.' })
+    return res.json({ success: true, message: 'Repository removed successfully.' })
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message })
+  }
 })
 
 // ── Live GitHub data fetchers ─────────────────────────────
@@ -1000,6 +1031,66 @@ app.post('/api/pipeline/repo-analysis/run', requireAuth, async (req, res) => {
   }
 })
 
+
+// ── File Flow & Code Architecture Endpoints ──────────────────
+
+app.post('/api/file-flow/scan', requireAuth, async (req, res) => {
+  try {
+    const projectId = req.body?.projectId || req.query?.projectId || 'sycnops'
+    const result = await runFileFlowScan(projectId)
+    return res.json({ success: true, message: 'File flow scan completed successfully', data: result })
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message })
+  }
+})
+
+app.get('/api/file-flow/graph', requireAuth, async (req, res) => {
+  try {
+    const projectId = req.query?.projectId || 'sycnops'
+    const result = await getLatestFileFlowAnalysis(projectId)
+    return res.json({ success: true, data: result })
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message })
+  }
+})
+
+app.get('/api/file-flow/files', requireAuth, async (req, res) => {
+  try {
+    const projectId = req.query?.projectId || 'sycnops'
+    const result = await getLatestFileFlowAnalysis(projectId)
+    const files = (result.nodes || []).filter((n) => n.type === 'file').map((n) => n.data)
+    return res.json({ success: true, count: files.length, data: files })
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message })
+  }
+})
+
+app.get('/api/file-flow/file-details', requireAuth, async (req, res) => {
+  try {
+    const filePath = req.query?.path
+    if (!filePath) {
+      return res.status(400).json({ success: false, message: 'Query parameter "path" is required' })
+    }
+    const details = getFileDetails(filePath)
+    return res.json({ success: true, data: details })
+  } catch (err) {
+    return res.status(404).json({ success: false, message: err.message })
+  }
+})
+
+app.get('/api/file-flow/paths', requireAuth, async (req, res) => {
+  try {
+    const { source, target, projectId = 'sycnops' } = req.query
+    if (!source || !target) {
+      return res.status(400).json({ success: false, message: 'Query parameters "source" and "target" are required' })
+    }
+    const analysis = await getLatestFileFlowAnalysis(projectId)
+    const paths = findGraphPaths(source, target, analysis.edges || [])
+    return res.json({ success: true, count: paths.length, data: paths })
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message })
+  }
+})
 
 app.use((req, res) => {
   res.status(404).json({ success: false, message: `Route not found: ${req.method} ${req.originalUrl}` })

@@ -316,7 +316,7 @@ export default function Profile() {
               ACTIVE STACK &amp; PROTOCOLS
             </h3>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-              {['MongoDB Atlas', 'TypeScript', 'React 18', 'Node.js Express', 'TanStack Query', 'Tailwind CSS'].map(skill => (
+              {['Firebase Firestore', 'TypeScript', 'React 18', 'Node.js Express', 'TanStack Query', 'Tailwind CSS'].map(skill => (
                 <span
                   key={skill}
                   style={{

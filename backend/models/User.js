@@ -1,100 +1,33 @@
-import mongoose from 'mongoose'
-import bcrypt from 'bcryptjs'
+/**
+ * User model and helpers for Firebase Firestore (`users` collection).
+ */
+import { getDB } from '../config/firebase.js'
 
-const userSchema = new mongoose.Schema(
-  {
-    name: {
-      type: String,
-      required: [true, 'Please provide a name'],
-      trim: true,
-      maxlength: [100, 'Name cannot exceed 100 characters']
-    },
-    email: {
-      type: String,
-      required: [true, 'Please provide an email address'],
-      unique: true,
-      lowercase: true,
-      trim: true,
-      match: [
-        /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/,
-        'Please provide a valid email address'
-      ]
-    },
-    password: {
-      type: String,
-      required: function () {
-        return this.authProvider === 'local'
-      },
-      minlength: [6, 'Password must be at least 6 characters']
-    },
-    role: {
-      type: String,
-      default: 'developer'
-    },
-    avatar: {
-      type: String,
-      default: null
-    },
-    authProvider: {
-      type: String,
-      enum: ['local', 'google', 'github'],
-      default: 'local'
-    },
-    isActive: {
-      type: Boolean,
-      default: true
-    },
-    lastLoginAt: {
-      type: Date,
-      default: null
-    }
-  },
-  {
-    timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
-  }
-)
+export const USERS_COLLECTION = 'users'
 
-// ── Indexes ──────────────────────────────────────────────
-userSchema.index({ role: 1 })
-userSchema.index({ authProvider: 1 })
-userSchema.index({ createdAt: -1 })
-
-// ── Virtuals ─────────────────────────────────────────────
-userSchema.virtual('githubAccounts', {
-  ref: 'GitHubAccount',
-  localField: '_id',
-  foreignField: 'user'
-})
-
-userSchema.virtual('notifications', {
-  ref: 'Notification',
-  localField: '_id',
-  foreignField: 'user'
-})
-
-userSchema.virtual('aiHistory', {
-  ref: 'AIHistory',
-  localField: '_id',
-  foreignField: 'user'
-})
-
-// ── Middleware ────────────────────────────────────────────
-// Encrypt password before saving
-userSchema.pre('save', async function () {
-  if (!this.isModified('password')) {
-    return
-  }
-  const salt = await bcrypt.genSalt(10)
-  this.password = await bcrypt.hash(this.password, salt)
-})
-
-// ── Instance Methods ─────────────────────────────────────
-// Match user entered password to hashed password in database
-userSchema.methods.matchPassword = async function (enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password)
+export function getUsersCollection() {
+  const db = getDB()
+  return db ? db.collection(USERS_COLLECTION) : null
 }
 
-const User = mongoose.model('User', userSchema)
-export default User
+export function formatUserData(doc) {
+  if (!doc) return null
+  const data = typeof doc.data === 'function' ? doc.data() : doc
+  return {
+    id: doc.id || data.id,
+    name: data.name || '',
+    email: data.email || '',
+    role: data.role || 'developer',
+    avatar: data.avatar || null,
+    authProvider: data.authProvider || 'local',
+    isActive: data.isActive !== false,
+    lastLoginAt: data.lastLoginAt || null,
+    createdAt: data.createdAt || new Date().toISOString()
+  }
+}
+
+export default {
+  USERS_COLLECTION,
+  getUsersCollection,
+  formatUserData
+}

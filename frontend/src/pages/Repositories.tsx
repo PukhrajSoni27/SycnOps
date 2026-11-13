@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Lock, Globe } from 'lucide-react'
-import { useRepositoriesQuery, useImportRepositoryMutation } from '@/hooks/useApi'
+import { Lock, Globe, Trash2 } from 'lucide-react'
+import { useRepositoriesQuery, useImportRepositoryMutation, useDeleteRepositoryMutation } from '@/hooks/useApi'
 import { apiGet } from '@/services/api'
 
 /**
@@ -29,10 +29,12 @@ function parseGitHubInput(input: string): { owner: string; repo: string } | null
 export default function Repositories() {
   const { data: repositories = [], isLoading } = useRepositoriesQuery()
   const importMutation = useImportRepositoryMutation()
+  const deleteMutation = useDeleteRepositoryMutation()
   const navigate = useNavigate()
 
   const [search, setSearch] = useState('')
   const [showImportModal, setShowImportModal] = useState(false)
+  const [repoToDelete, setRepoToDelete] = useState<any | null>(null)
 
   // Form fields for the import modal
   const [repoInput, setRepoInput] = useState('')
@@ -341,6 +343,39 @@ export default function Repositories() {
                           ANALYZE
                         </Link>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => setRepoToDelete(repo)}
+                        title="Remove repository from workspace"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          color: '#F87171',
+                          cursor: 'pointer',
+                          fontSize: '9px',
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 600,
+                          letterSpacing: '0.08em',
+                          textTransform: 'uppercase',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.25)'
+                          e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)'
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'
+                          e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)'
+                        }}
+                      >
+                        <Trash2 size={11} />
+                        <span>REMOVE</span>
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -739,6 +774,107 @@ export default function Repositories() {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* ── Remove Repository Confirmation Modal ────────────────────────────── */}
+      {repoToDelete && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+          <div
+            style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(10, 9, 8, 0.75)', backdropFilter: 'blur(6px)' }}
+            onClick={() => !deleteMutation.isPending && setRepoToDelete(null)}
+          />
+
+          <div
+            style={{
+              position: 'relative',
+              width: '100%',
+              maxWidth: '480px',
+              backgroundColor: '#141210',
+              borderRadius: '16px',
+              border: '1px solid rgba(89, 9, 7, 0.65)',
+              boxShadow: '0 24px 60px rgba(0, 0, 0, 0.85), 0 0 32px rgba(89, 9, 7, 0.35)',
+              padding: '24px',
+              zIndex: 1
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '10px',
+                  backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#F87171',
+                  flexShrink: 0
+                }}
+              >
+                <Trash2 size={20} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <h3
+                  style={{
+                    margin: '0 0 6px',
+                    fontFamily: 'var(--font-serif)',
+                    fontSize: '19px',
+                    color: '#F5F5F4',
+                    letterSpacing: '-0.01em'
+                  }}
+                >
+                  Remove Repository
+                </h3>
+                <p style={{ margin: 0, fontSize: '13px', color: '#A8A29E', lineHeight: '1.5' }}>
+                  Are you sure you want to remove <strong style={{ color: '#E8D2B5', fontFamily: 'monospace' }}>{repoToDelete.fullName || repoToDelete.name}</strong> from your studio workspace? This will unlink the repository and its active pipeline records.
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
+              <button
+                type="button"
+                className="s-btn s-btn--outline"
+                onClick={() => setRepoToDelete(null)}
+                disabled={deleteMutation.isPending}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await deleteMutation.mutateAsync(repoToDelete.id)
+                    setRepoToDelete(null)
+                  } catch (err: any) {
+                    alert(err.message || 'Failed to remove repository')
+                  }
+                }}
+                disabled={deleteMutation.isPending}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: '8px',
+                  backgroundColor: '#590907',
+                  border: '1px solid rgba(232, 210, 181, 0.35)',
+                  color: '#E8D2B5',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  fontFamily: 'var(--font-mono)',
+                  letterSpacing: '0.05em',
+                  cursor: deleteMutation.isPending ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 2px 12px rgba(89, 9, 7, 0.65)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Trash2 size={13} />
+                {deleteMutation.isPending ? 'Removing...' : 'Confirm Remove'}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -298,6 +298,10 @@ export async function importRepository(data: { name: string; language?: string; 
   return json.data
 }
 
+export async function deleteRepository(id: number | string): Promise<{ success: boolean; message: string }> {
+  return api(`/repositories/${id}`, { method: 'DELETE' })
+}
+
 export async function fetchGitHubRepoInfo(owner: string, repo: string, token?: string): Promise<any> {
   const query = token ? `?token=${encodeURIComponent(token)}` : ''
   const json = await api(`/repositories/github-info/${owner}/${repo}${query}`)
@@ -355,4 +359,135 @@ export async function analyzeFileAST(code?: string, filePath?: string): Promise<
     body: JSON.stringify({ code, filePath })
   })
   return json.data
+}
+
+// ── File Flow Architecture Types & APIs ────────────────────────
+
+export interface FileFlowNodeData {
+  [key: string]: any
+  id: string
+  label: string
+  path: string
+  name: string
+  category?: 'frontend' | 'backend' | 'database' | 'config' | string
+  language?: string
+  size?: number
+  lines?: number
+  linesCount?: number
+  functionsCount?: number
+  importsCount?: number
+  exportsCount?: number
+  apiCallsCount?: number
+  routesCount?: number
+  incomingEdgesCount?: number
+  outgoingEdgesCount?: number
+  isCircular?: boolean
+  isDisconnected?: boolean
+  isOrphan?: boolean
+  statusLabel?: string
+  method?: string
+  route?: string
+  collection?: string
+  operation?: string
+  type?: string
+  status?: string
+}
+
+export interface FileFlowNode {
+  id: string
+  label?: string
+  path?: string
+  type: 'fileNode' | 'apiNode' | 'databaseNode' | 'mlNode' | string
+  category?: 'frontend' | 'backend' | 'database' | 'config' | string
+  position?: { x: number; y: number }
+  data: FileFlowNodeData
+}
+
+export interface FileFlowEdge {
+  id: string
+  source: string
+  target: string
+  type: string
+  confidence?: 'high' | 'inferred' | 'unresolved' | string
+  evidence?: string
+  animated?: boolean
+  label?: string
+  isCircular?: boolean
+}
+
+export interface FileFlowSummary {
+  totalFiles: number
+  totalNodes: number
+  totalEdges: number
+  languages: Record<string, number>
+  apiEndpointsDetected: number
+  matchedConnections: number
+  brokenConnections: number
+  databaseOperations: number
+  circularDependenciesCount?: number
+  disconnectedFilesCount?: number
+  orphanFilesCount?: number
+}
+
+export interface FileFlowGraphResponse {
+  projectId: string
+  analysisId?: string
+  analyzedAt?: string
+  timestamp?: string
+  scanDuration?: string
+  nodes: FileFlowNode[]
+  edges: FileFlowEdge[]
+  summary: FileFlowSummary
+  circularDependencies?: string[][]
+}
+
+export interface FileDetailResponse {
+  path: string
+  name: string
+  language: string
+  code: string
+  linesCount: number
+  sizeBytes: number
+  functions: Array<{ name: string; line: number; params: string[]; isAsync?: boolean }>
+  imports: Array<{ source: string; line: number; specifiers: string[] }>
+  exports: Array<{ name: string; line: number; type: string }>
+  apiCalls: Array<{ method: string; path: string; line: number; matchedEndpoint?: string }>
+  routes: Array<{ method: string; path: string; line: number; handler: string }>
+  dbOperations: Array<{ operation: string; collection: string; line: number }>
+}
+
+export async function scanFileFlow(projectId = 'sycnops'): Promise<FileFlowGraphResponse> {
+  const json = await api('/file-flow/scan', {
+    method: 'POST',
+    body: JSON.stringify({ projectId })
+  })
+  return json.data
+}
+
+export async function fetchFileFlowGraph(projectId = 'sycnops'): Promise<FileFlowGraphResponse> {
+  const json = await api(`/file-flow/graph?projectId=${encodeURIComponent(projectId)}`)
+  return json.data
+}
+
+export async function fetchFileFlowFiles(projectId = 'sycnops'): Promise<FileFlowNodeData[]> {
+  const json = await api(`/file-flow/files?projectId=${encodeURIComponent(projectId)}`)
+  return json.data || []
+}
+
+export async function fetchFileDetails(filePath: string): Promise<FileDetailResponse> {
+  const json = await api(`/file-flow/file-details?path=${encodeURIComponent(filePath)}`)
+  return json.data
+}
+
+export async function fetchFileFlowPaths(
+  source: string,
+  target: string,
+  projectId = 'sycnops'
+): Promise<Array<Array<{ id: string; edge: any }>>> {
+  const json = await api(
+    `/file-flow/paths?source=${encodeURIComponent(source)}&target=${encodeURIComponent(
+      target
+    )}&projectId=${encodeURIComponent(projectId)}`
+  )
+  return json.data || []
 }

@@ -31,70 +31,66 @@ GH_TIMEOUT = 12.0
 pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 users: list[dict] = []
 workspaces: dict[str, dict] = {}
-users_col = None
+firebase_db = None
 
 
-def connect_mongo():
-    global users_col
-    uri = os.getenv("MONGO_URI")
-    if not uri:
-        print("MONGO_URI not set — in-memory users.")
-        return
+def init_firebase():
+    global firebase_db
     try:
-        from pymongo import MongoClient
-        client = MongoClient(uri, serverSelectionTimeoutMS=10000)
-        client.admin.command("ping")
-        db = None
-        try:
-            db = client.get_default_database()
-        except Exception:
-            db = None
-        if db is None:
-            db = client["sycnops"]
-        users_col = db["users"]
-        print("MongoDB connected")
+        import firebase_admin
+        from firebase_admin import credentials, firestore
+        if not firebase_admin._apps:
+            service_account_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH")
+            if service_account_path and os.path.exists(service_account_path):
+                cred = credentials.Certificate(service_account_path)
+                firebase_admin.initialize_app(cred)
+            else:
+                project_id = os.getenv("FIREBASE_PROJECT_ID", "sycnops-cd9af")
+                firebase_admin.initialize_app(options={"projectId": project_id})
+        firebase_db = firestore.client()
+        print("Firebase Firestore connected (Python).")
     except Exception as err:
-        print("MongoDB failed:", err, "— in-memory users.")
+        print(f"Firebase Firestore init in Python: {err} — running in-memory mode.")
 
 
-connect_mongo()
-
-
-def mongo_to_user(doc: dict) -> dict:
-    return {
-        "id": str(doc["_id"]),
-        "name": doc.get("name"),
-        "email": doc.get("email"),
-        "password": doc.get("password"),
-        "role": doc.get("role", "developer"),
-        "authProvider": doc.get("authProvider", "local"),
-        "createdAt": doc.get("createdAt"),
-    }
+init_firebase()
 
 
 def find_user_email(email: str) -> Optional[dict]:
-    if users_col is not None:
-        doc = users_col.find_one({"email": email})
-        return mongo_to_user(doc) if doc else None
+    if firebase_db is not None:
+        try:
+            docs = list(firebase_db.collection("users").where("email", "==", email).limit(1).stream())
+            if docs:
+                d = docs[0].to_dict()
+                d["id"] = docs[0].id
+                return d
+        except Exception:
+            pass
     return next((u for u in users if u["email"] == email), None)
 
 
 def find_user_id(user_id: str) -> Optional[dict]:
-    if users_col is not None:
-        from bson import ObjectId
+    if firebase_db is not None:
         try:
-            doc = users_col.find_one({"_id": ObjectId(user_id)})
+            doc = firebase_db.collection("users").document(user_id).get()
+            if doc.exists:
+                d = doc.to_dict()
+                d["id"] = doc.id
+                return d
         except Exception:
-            doc = None
-        return mongo_to_user(doc) if doc else None
+            pass
     return next((u for u in users if u["id"] == user_id), None)
 
 
 def save_user(data: dict) -> dict:
-    if users_col is not None:
-        res = users_col.insert_one(data)
-        data["id"] = str(res.inserted_id)
-        return data
+    if firebase_db is not None:
+        try:
+            doc_id = data.get("id") or f"usr_{int(time.time() * 1000)}"
+            data["id"] = doc_id
+            firebase_db.collection("users").document(doc_id).set(data)
+            return data
+        except Exception:
+            pass
     data["id"] = data.get("id") or f"usr_{int(time.time() * 1000)}"
     users.append(data)
     return data

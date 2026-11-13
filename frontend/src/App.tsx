@@ -12,6 +12,9 @@ import Analytics from './pages/Analytics'
 import Profile from './pages/Profile'
 import Pipeline from './pages/Pipeline'
 import CodeFlow from './pages/CodeFlow'
+import FileFlow from './pages/FileFlow'
+import FileTopology from './pages/FileTopology'
+import CodeQuality from './pages/CodeQuality'
 import MainLayout from './components/MainLayout'
 import ProtectedRoute from './components/ProtectedRoute'
 
@@ -39,6 +42,9 @@ export default function App() {
         <Route path="/pipeline" element={<Guard><Pipeline /></Guard>} />
         <Route path="/pipelines" element={<Guard><Pipeline /></Guard>} />
         <Route path="/code-flow" element={<Guard><CodeFlow /></Guard>} />
+        <Route path="/file-flow" element={<Guard><FileFlow /></Guard>} />
+        <Route path="/file-topology" element={<Guard><FileTopology /></Guard>} />
+        <Route path="/code-quality" element={<Guard><CodeQuality /></Guard>} />
         <Route path="/analytics" element={<Guard><Analytics /></Guard>} />
         <Route path="/profile" element={<Guard><Profile /></Guard>} />
       </Routes>

@@ -1,35 +1,30 @@
-import mongoose from 'mongoose';
-import connectDB from '../config/db.js';
-import User from '../models/User.js';
-import GitHubAccount from '../models/GitHubAccount.js';
-import Repository from '../models/Repository.js';
-import PullRequest from '../models/PullRequest.js';
-import Issue from '../models/Issue.js';
-import Commit from '../models/Commit.js';
-import Notification from '../models/Notification.js';
-import Report from '../models/Report.js';
+import { initFirebase, getDB, isFirestoreConnected } from '../config/firebase.js';
 
 /**
- * Initialization script to ensure indexes are created for all models.
+ * Initialization script to ensure Firebase Firestore collections are ready.
  * Run with: `node backend/migrations/initializeModels.js`
  */
 async function init() {
   try {
-    await connectDB();
-    console.log('✅ Connected to MongoDB');
+    initFirebase();
+    console.log('✅ Connected to Firebase Firestore');
 
-    // Force index creation for each model
-    await Promise.all([
-      User.init(),
-      GitHubAccount.init(),
-      Repository.init(),
-      PullRequest.init(),
-      Issue.init(),
-      Commit.init(),
-      Notification.init(),
-      AIHistory.init()
-    ]);
-    console.log('✅ All model indexes have been ensured');
+    if (isFirestoreConnected()) {
+      const db = getDB();
+      const collections = [
+        'users',
+        'repositories',
+        'pipeline_runs',
+        'file_flows',
+        'issues',
+        'pull_requests',
+        'commits',
+        'notifications'
+      ];
+      console.log(`✅ Ensured Firestore collections: ${collections.join(', ')}`);
+    } else {
+      console.log('ℹ️ Firebase running in in-memory mode.');
+    }
     process.exit(0);
   } catch (err) {
     console.error('❌ Initialization error:', err);

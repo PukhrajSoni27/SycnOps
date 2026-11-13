@@ -19,10 +19,10 @@ const DEFAULT_OPERATION_FALLBACK = {
   id: 'report-lost-item',
   title: 'Report Lost Item',
   repository: 'campus-lost-found',
-  description: 'A student reports a lost item on campus. The request is validated on the client, sent via REST API, authenticated, handled by the controller, validated against the Mongoose schema, and persisted to MongoDB.',
+  description: 'A student reports a lost item on campus. The request is validated on the client, sent via REST API, authenticated, handled by the controller, and persisted to Firebase Firestore.',
   trigger: 'User fills out the form and clicks "Submit Lost Report"',
   apiEndpoint: 'POST /api/items',
-  databaseOperation: 'Item.create() -> MongoDB db.items.insertOne()',
+  databaseOperation: 'collection("items").add() -> Firebase Firestore document write',
   totalSteps: 8,
   nodes: [
     {
@@ -210,7 +210,7 @@ export function authenticate(req, res, next) {
       calls: ['validateItemData()', 'Item.create()'],
       calledBy: ['itemRoutes.js:21 after authenticate()'],
       apiEndpoint: 'POST /api/items',
-      dbOperation: 'Delegates to Mongoose Item model',
+      dbOperation: 'Delegates to Firebase Firestore collection write',
       branchConditions: [
         'if (!validation.isValid) -> res.status(400).json({ errors })',
         'if (database error) -> res.status(500).json({ error })'
@@ -254,70 +254,65 @@ export async function createItem(req, res) {
     {
       id: 'step_7',
       stepNumber: 7,
-      name: 'Validate item data (Mongoose Schema)',
+      name: 'Validate item data (Firestore Schema)',
       type: 'model_validation',
       category: 'Model & Schema Guard',
       filePath: 'backend/models/Item.js',
       line: 32,
-      params: ['schemaDoc: ItemDocument'],
-      calls: ['mongoose.Schema.validate()'],
-      calledBy: ['Item.create() in itemController.js:40'],
+      params: ['docData: ItemPayload'],
+      calls: ['validateFirestoreDocument()'],
+      calledBy: ['createItem() in itemController.js:40'],
       apiEndpoint: 'N/A',
-      dbOperation: 'Pre-save schema validation hook',
+      dbOperation: 'Pre-save schema validation check',
       branchConditions: [
         'title: required, minlength: 3, maxlength: 120',
         'category: enum ["electronics", "documents", "clothing", "keys", "other"]',
         'location: required, trim'
       ],
-      errorHandling: 'Mongoose ValidationError thrown if any field fails schema constraints.',
-      summary: 'Mongoose compiles schema validators, applies default fields (status="reported"), and runs pre-save hooks.',
+      errorHandling: 'ValidationError thrown if any field fails Firestore document constraints.',
+      summary: 'Validates document attributes, applies default fields (status="reported"), and enforces schema types for Firestore.',
       codeSnippet: `// backend/models/Item.js:32
-import mongoose from 'mongoose';
-
-const itemSchema = new mongoose.Schema({
-  reporter: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  title: { type: String, required: [true, 'Title is required'], trim: true, minlength: 3 },
-  category: {
-    type: String,
-    enum: ['electronics', 'documents', 'clothing', 'keys', 'other'],
-    required: true
-  },
-  location: { type: String, required: true },
-  status: { type: String, enum: ['reported', 'claimed', 'resolved'], default: 'reported' },
-  dateLost: { type: Date, default: Date.now }
-}, { timestamps: true });
-
-export default mongoose.model('Item', itemSchema);`
+export function validateItem(doc) {
+  if (!doc.title || doc.title.length < 3) throw new Error('Title is required');
+  if (!['electronics', 'documents', 'clothing', 'keys', 'other'].includes(doc.category)) {
+    throw new Error('Invalid item category');
+  }
+  return {
+    ...doc,
+    status: doc.status || 'reported',
+    createdAt: new Date()
+  };
+}`
     },
     {
       id: 'step_8',
       stepNumber: 8,
-      name: 'Save item in MongoDB',
+      name: 'Save item in Firebase Firestore',
       type: 'database',
       category: 'Database Storage',
-      filePath: 'MongoDB Atlas / Firestore Collection',
+      filePath: 'Firebase Firestore / items collection',
       line: 1,
-      params: ['document: BSON Object'],
-      calls: ['db.collection("items").insertOne()'],
-      calledBy: ['Mongoose Driver / Firestore Client'],
+      params: ['document: Firestore Document'],
+      calls: ['db.collection("items").add()'],
+      calledBy: ['Firebase Admin SDK / Firestore Client'],
       apiEndpoint: 'N/A',
-      dbOperation: 'INSERT INTO items (reporter, title, category, location, status, createdAt)',
-      branchConditions: ['Unique index verification; replica acknowledgment (w: majority)'],
-      errorHandling: 'Socket timeout or duplicate key error triggers MongoDB MongoServerError code 11000.',
-      summary: 'Database persists record to disk, allocates unique _id ObjectId, creates indexes, and returns acknowledgment.',
-      codeSnippet: `// MongoDB Database Engine Operation:
-db.items.insertOne({
-  "_id": ObjectId("672e8f19a0e234bc50123456"),
-  "reporter": ObjectId("672e8111a0e234bc50129999"),
+      dbOperation: 'Firestore write -> collection("items").doc(id).set(data)',
+      branchConditions: ['Document validation; security rules authorization check'],
+      errorHandling: 'Permission denied or quota limit error triggers FirebaseFirestoreError.',
+      summary: 'Database persists document to Firebase Cloud Firestore, allocates unique document ID, and syncs indexes.',
+      codeSnippet: `// Firebase Cloud Firestore Engine Operation:
+await db.collection("items").add({
+  "id": "doc_9e881661_2026",
+  "reporter": "usr_pukhraj_soni",
   "title": "MacBook Air M2 - Silver",
   "category": "electronics",
   "location": "Science Library, 2nd Floor Study Room",
   "status": "reported",
-  "dateLost": ISODate("2026-11-09T18:30:00.000Z"),
-  "createdAt": ISODate("2026-11-09T22:20:14.102Z"),
-  "updatedAt": ISODate("2026-11-09T22:20:14.102Z")
+  "dateLost": new Date("2026-11-09T18:30:00.000Z"),
+  "createdAt": new Date("2026-11-09T22:20:14.102Z"),
+  "updatedAt": new Date("2026-11-09T22:20:14.102Z")
 });
-// Write Concern: w: "majority", j: true -> Acknowledged (2ms)`
+// Firestore Write Result: WriteResult { writeTime: 2026-11-09T22:20:14.150Z } -> Acknowledged`
     }
   ]
 }
