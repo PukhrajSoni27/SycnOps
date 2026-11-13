@@ -36,6 +36,10 @@ lerna-debug.log*
 *service-account*.json
 serviceAccountKey.json
 
+# Workspace Cache
+.workspace_cache.json
+backend/.workspace_cache.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

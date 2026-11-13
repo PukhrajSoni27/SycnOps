@@ -1,3 +1,4 @@
+import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
 import { fileURLToPath } from 'url'
@@ -66,6 +67,34 @@ function hashCode(str) {
 // ── In-memory fallback storage ────────────────────────────
 const memoryUsers = []
 const workspaces = new Map()
+const WORKSPACE_CACHE_FILE = path.join(__dirname, '.workspace_cache.json')
+
+function loadCachedWorkspaces() {
+  try {
+    if (fs.existsSync(WORKSPACE_CACHE_FILE)) {
+      const data = JSON.parse(fs.readFileSync(WORKSPACE_CACHE_FILE, 'utf8'))
+      for (const [k, v] of Object.entries(data)) {
+        workspaces.set(k, v)
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to load workspace cache:', e.message)
+  }
+}
+
+function saveCachedWorkspaces() {
+  try {
+    const obj = {}
+    for (const [k, v] of workspaces.entries()) {
+      obj[k] = v
+    }
+    fs.writeFileSync(WORKSPACE_CACHE_FILE, JSON.stringify(obj, null, 2), 'utf8')
+  } catch (e) {
+    console.warn('Failed to save workspace cache:', e.message)
+  }
+}
+
+loadCachedWorkspaces()
 
 // ── Initialize Firebase ───────────────────────────────────
 initFirebase()
@@ -122,6 +151,7 @@ async function updateUser(id, data) {
 
 function getDefaultPipelines(repos) {
   const repoName = repos[0]?.name || 'campus-lost-found'
+  
   const repoFull = repos[0]?.fullName || 'studio/campus-lost-found'
   const now = Date.now()
 
@@ -287,48 +317,55 @@ function getDefaultPipelines(repos) {
 function workspace(userId) {
   const key = String(userId)
   if (!workspaces.has(key)) {
-    workspaces.set(key, { repos: [], pipelines: null })
+    workspaces.set(key, { repos: [], pipelines: null, initialized: false })
   }
   const ws = workspaces.get(key)
-  if (ws.repos.length === 0) {
-    ws.repos.push({
-      id: 1,
-      name: 'campus-lost-found',
-      fullName: 'studio/campus-lost-found',
-      description: 'Campus Lost and Found tracker and reporting application',
-      language: 'TypeScript',
-      visibility: 'public',
-      defaultBranch: 'main',
-      stars: 18,
-      forks: 4,
-      openIssues: 1,
-      source: 'manual',
-      importedAt: new Date().toISOString()
-    })
-    ws.repos.push({
-      id: 2,
-      name: 'sycnops-core',
-      fullName: 'studio/sycnops-core',
-      description: 'SycnOps AI developer workflow platform core repository',
-      language: 'TypeScript',
-      visibility: 'public',
-      defaultBranch: 'main',
-      stars: 12,
-      forks: 3,
-      openIssues: 2,
-      source: 'manual',
-      importedAt: new Date().toISOString()
-    })
-  }
-  if (!ws.pipelines || ws.pipelines.length === 0) {
+  if (!ws.initialized) {
+    ws.initialized = true
+    ws.repos = [
+      {
+        id: 1,
+        name: 'campus-lost-found',
+        fullName: 'studio/campus-lost-found',
+        description: 'Campus Lost and Found tracker and reporting application',
+        language: 'TypeScript',
+        visibility: 'public',
+        defaultBranch: 'main',
+        stars: 18,
+        forks: 4,
+        openIssues: 1,
+        source: 'manual',
+        importedAt: new Date().toISOString()
+      },
+      {
+        id: 2,
+        name: 'sycnops-core',
+        fullName: 'studio/sycnops-core',
+        description: 'SycnOps AI developer workflow platform core repository',
+        language: 'TypeScript',
+        visibility: 'public',
+        defaultBranch: 'main',
+        stars: 12,
+        forks: 3,
+        openIssues: 2,
+        source: 'manual',
+        importedAt: new Date().toISOString()
+      }
+    ]
     ws.pipelines = getDefaultPipelines(ws.repos)
+    saveCachedWorkspaces()
+  }
+  if (!ws.pipelines) {
+    ws.pipelines = ws.repos && ws.repos.length > 0 ? getDefaultPipelines(ws.repos) : []
   }
   return ws
 }
 
 function findRepo(list, idParam) {
+  if (!list || !Array.isArray(list)) return null
   const numId = Number(idParam)
-  return list.find((r) => r.id === numId || r.name === idParam || r.fullName === idParam)
+  const strId = String(idParam)
+  return list.find((r) => r.id === numId || String(r.id) === strId || r.name === strId || r.fullName === strId)
 }
 
 // ── Auth middleware ───────────────────────────────────────
@@ -563,6 +600,13 @@ app.post('/api/repositories/import', requireAuth, async (req, res) => {
         commits: bundle.commits
       }
       ws.repos.unshift(repo)
+      saveCachedWorkspaces()
+      if (isFirestoreConnected()) {
+        try {
+          const db = getDB()
+          if (db) await db.collection('workspaces').doc(String(req.auth.id)).set({ repos: ws.repos, initialized: true }, { merge: true }).catch(() => {})
+        } catch (e) {}
+      }
       return res.status(201).json({ success: true, message: `Imported ${repo.fullName} from GitHub.`, data: repo })
     } catch (err) {
       if (err.isRateLimit || err.message?.toLowerCase().includes('rate limit')) {
@@ -614,6 +658,13 @@ app.post('/api/repositories/import', requireAuth, async (req, res) => {
       ]
     }
     ws.repos.unshift(customRepo)
+    saveCachedWorkspaces()
+    if (isFirestoreConnected()) {
+      try {
+        const db = getDB()
+        if (db) await db.collection('workspaces').doc(String(req.auth.id)).set({ repos: ws.repos, initialized: true }, { merge: true }).catch(() => {})
+      } catch (e) {}
+    }
     return res.status(201).json({ success: true, message: `Created custom repository ${customRepo.name}.`, data: customRepo })
   }
 })
@@ -694,21 +745,74 @@ app.get('/api/repositories/:id/analysis', requireAuth, async (req, res) => {
   }
 })
 
-app.delete('/api/repositories/:id', requireAuth, async (req, res) => {
+app.delete('/api/repositories/all', requireAuth, async (req, res) => {
   try {
     const ws = workspace(req.auth.id)
-    const before = ws.repos.length
-    const id = Number(req.params.id)
-    const removedRepo = ws.repos.find((r) => r.id === id || r.name === req.params.id || r.fullName === req.params.id)
+    ws.repos = []
+    ws.pipelines = []
+    saveCachedWorkspaces()
 
-    ws.repos = ws.repos.filter((r) => r.id !== id && r.name !== req.params.id && r.fullName !== req.params.id)
+    if (isFirestoreConnected()) {
+      try {
+        const db = getDB()
+        if (db) {
+          await db.collection('workspaces').doc(String(req.auth.id)).set({ repos: [], pipelines: [], initialized: true }, { merge: true }).catch(() => {})
+          const snap = await db.collection('repositories').get().catch(() => null)
+          if (snap && !snap.empty) {
+            for (const doc of snap.docs) {
+              await doc.ref.delete().catch(() => {})
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    return res.json({ success: true, message: 'All repositories removed successfully.', count: 0, data: [] })
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message })
+  }
+})
+
+app.delete('/api/repositories/:id', requireAuth, async (req, res) => {
+  try {
+    const idParam = String(req.params.id)
+    const ws = workspace(req.auth.id)
+
+    if (idParam === 'all') {
+      ws.repos = []
+      ws.pipelines = []
+      saveCachedWorkspaces()
+      if (isFirestoreConnected()) {
+        try {
+          const db = getDB()
+          if (db) {
+            await db.collection('workspaces').doc(String(req.auth.id)).set({ repos: [], pipelines: [], initialized: true }, { merge: true }).catch(() => {})
+            const snap = await db.collection('repositories').get().catch(() => null)
+            if (snap && !snap.empty) {
+              for (const doc of snap.docs) {
+                await doc.ref.delete().catch(() => {})
+              }
+            }
+          }
+        } catch (e) {}
+      }
+      return res.json({ success: true, message: 'All repositories removed successfully.', count: 0, data: [] })
+    }
+
+    const before = ws.repos.length
+    const numId = Number(idParam)
+    const removedRepo = ws.repos.find((r) => r.id === numId || String(r.id) === idParam || r.name === idParam || r.fullName === idParam)
+
+    ws.repos = ws.repos.filter((r) => r.id !== numId && String(r.id) !== idParam && r.name !== idParam && r.fullName !== idParam)
+    saveCachedWorkspaces()
 
     // Also remove from Firebase Firestore
     if (isFirestoreConnected()) {
       try {
         const db = getDB()
         if (db) {
-          await db.collection('repositories').doc(String(req.params.id)).delete().catch(() => {})
+          await db.collection('workspaces').doc(String(req.auth.id)).set({ repos: ws.repos, initialized: true }, { merge: true }).catch(() => {})
+          await db.collection('repositories').doc(idParam).delete().catch(() => {})
           if (removedRepo?.fullName) {
             const snap = await db.collection('repositories').where('fullName', '==', removedRepo.fullName).get().catch(() => null)
             if (snap && !snap.empty) {
@@ -886,6 +990,7 @@ app.get('/api/pipelines', requireAuth, async (req, res) => {
           }
         }
       } catch (e) {
+
         // Fallback to in-memory workspace
       }
     }

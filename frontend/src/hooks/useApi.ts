@@ -6,6 +6,7 @@ import {
   fetchAnalytics,
   importRepository,
   deleteRepository,
+  deleteAllRepositories,
   fetchPipelines,
   triggerPipelineRun,
   cancelPipelineRun,
@@ -104,7 +105,27 @@ export function useDeleteRepositoryMutation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (id: number | string) => deleteRepository(id),
+    onSuccess: (_data, id) => {
+      queryClient.setQueryData(['repositories'], (old: any) =>
+        Array.isArray(old) ? old.filter((r: any) => String(r.id) !== String(id) && r.name !== String(id) && r.fullName !== String(id)) : []
+      )
+      queryClient.invalidateQueries({ queryKey: ['repositories'] })
+      queryClient.invalidateQueries({ queryKey: ['pull-requests'] })
+      queryClient.invalidateQueries({ queryKey: ['issues'] })
+      queryClient.invalidateQueries({ queryKey: ['analytics'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['pipelines'] })
+      queryClient.invalidateQueries({ queryKey: ['repo-analysis-pipeline'] })
+    }
+  })
+}
+
+export function useDeleteAllRepositoriesMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: deleteAllRepositories,
     onSuccess: () => {
+      queryClient.setQueryData(['repositories'], [])
       queryClient.invalidateQueries({ queryKey: ['repositories'] })
       queryClient.invalidateQueries({ queryKey: ['pull-requests'] })
       queryClient.invalidateQueries({ queryKey: ['issues'] })

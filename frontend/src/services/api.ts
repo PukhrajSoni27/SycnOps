@@ -302,6 +302,10 @@ export async function deleteRepository(id: number | string): Promise<{ success: 
   return api(`/repositories/${id}`, { method: 'DELETE' })
 }
 
+export async function deleteAllRepositories(): Promise<{ success: boolean; message: string }> {
+  return api('/repositories/all', { method: 'DELETE' })
+}
+
 export async function fetchGitHubRepoInfo(owner: string, repo: string, token?: string): Promise<any> {
   const query = token ? `?token=${encodeURIComponent(token)}` : ''
   const json = await api(`/repositories/github-info/${owner}/${repo}${query}`)

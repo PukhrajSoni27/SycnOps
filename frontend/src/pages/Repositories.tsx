@@ -1,7 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Lock, Globe, Trash2 } from 'lucide-react'
-import { useRepositoriesQuery, useImportRepositoryMutation, useDeleteRepositoryMutation } from '@/hooks/useApi'
+import {
+  useRepositoriesQuery,
+  useImportRepositoryMutation,
+  useDeleteRepositoryMutation,
+  useDeleteAllRepositoriesMutation
+} from '@/hooks/useApi'
 import { apiGet } from '@/services/api'
 
 /**
@@ -30,10 +35,12 @@ export default function Repositories() {
   const { data: repositories = [], isLoading } = useRepositoriesQuery()
   const importMutation = useImportRepositoryMutation()
   const deleteMutation = useDeleteRepositoryMutation()
+  const deleteAllMutation = useDeleteAllRepositoriesMutation()
   const navigate = useNavigate()
 
   const [search, setSearch] = useState('')
   const [showImportModal, setShowImportModal] = useState(false)
+  const [showClearAllModal, setShowClearAllModal] = useState(false)
   const [repoToDelete, setRepoToDelete] = useState<any | null>(null)
 
   // Form fields for the import modal
@@ -178,12 +185,36 @@ export default function Repositories() {
             Repositories
           </h1>
           <p style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-muted)' }}>
-            {repositories.length} repositories in your studio workspace.
+            {repositories.length} {repositories.length === 1 ? 'repository' : 'repositories'} in your studio workspace.
           </p>
         </div>
-        <button className="s-btn" onClick={() => setShowImportModal(true)}>
-          Import Repository
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {repositories.length > 0 && (
+            <button
+              type="button"
+              className="s-btn s-btn--outline"
+              onClick={() => setShowClearAllModal(true)}
+              style={{
+                borderColor: 'rgba(239, 68, 68, 0.4)',
+                color: '#F87171',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '12px',
+                padding: '9px 16px',
+                cursor: 'pointer',
+                letterSpacing: '0.04em'
+              }}
+              title="Remove all repository links from workspace"
+            >
+              <Trash2 size={13} />
+              <span>Remove All Links</span>
+            </button>
+          )}
+          <button className="s-btn" onClick={() => setShowImportModal(true)}>
+            Import Repository
+          </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -873,6 +904,107 @@ export default function Repositories() {
               >
                 <Trash2 size={13} />
                 {deleteMutation.isPending ? 'Removing...' : 'Confirm Remove'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Clear All Repositories Confirmation Modal ───────────────────────── */}
+      {showClearAllModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+          <div
+            style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(10, 9, 8, 0.75)', backdropFilter: 'blur(6px)' }}
+            onClick={() => !deleteAllMutation.isPending && setShowClearAllModal(false)}
+          />
+
+          <div
+            style={{
+              position: 'relative',
+              width: '100%',
+              maxWidth: '480px',
+              backgroundColor: '#141210',
+              borderRadius: '16px',
+              border: '1px solid rgba(89, 9, 7, 0.65)',
+              boxShadow: '0 24px 60px rgba(0, 0, 0, 0.85), 0 0 32px rgba(89, 9, 7, 0.35)',
+              padding: '24px',
+              zIndex: 1
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '10px',
+                  backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#F87171',
+                  flexShrink: 0
+                }}
+              >
+                <Trash2 size={20} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <h3
+                  style={{
+                    margin: '0 0 6px',
+                    fontFamily: 'var(--font-serif)',
+                    fontSize: '19px',
+                    color: '#F5F5F4',
+                    letterSpacing: '-0.01em'
+                  }}
+                >
+                  Remove All Repository Links
+                </h3>
+                <p style={{ margin: 0, fontSize: '13px', color: '#A8A29E', lineHeight: '1.5' }}>
+                  Are you sure you want to remove all <strong style={{ color: '#E8D2B5', fontFamily: 'monospace' }}>{repositories.length}</strong> linked repositories from your workspace? All repository links will be unlinked and they will not return automatically.
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
+              <button
+                type="button"
+                className="s-btn s-btn--outline"
+                onClick={() => setShowClearAllModal(false)}
+                disabled={deleteAllMutation.isPending}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await deleteAllMutation.mutateAsync()
+                    setShowClearAllModal(false)
+                  } catch (err: any) {
+                    alert(err.message || 'Failed to remove repositories')
+                  }
+                }}
+                disabled={deleteAllMutation.isPending}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: '8px',
+                  backgroundColor: '#590907',
+                  border: '1px solid rgba(232, 210, 181, 0.35)',
+                  color: '#E8D2B5',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  fontFamily: 'var(--font-mono)',
+                  letterSpacing: '0.05em',
+                  cursor: deleteAllMutation.isPending ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 2px 12px rgba(89, 9, 7, 0.65)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Trash2 size={13} />
+                {deleteAllMutation.isPending ? 'Removing All...' : 'Confirm Remove All'}
               </button>
             </div>
           </div>

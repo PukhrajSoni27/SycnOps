@@ -673,9 +673,19 @@ async def repo_analysis(repo_id: str, user: dict = Depends(auth_user)):
     }
 
 
+@app.delete("/api/repositories/all")
+def delete_all_repos(user: dict = Depends(auth_user)):
+    ws = workspace(user["id"])
+    ws["repos"] = []
+    return {"success": True, "message": "All repositories removed."}
+
+
 @app.delete("/api/repositories/{repo_id}")
 def delete_repo(repo_id: str, user: dict = Depends(auth_user)):
     ws = workspace(user["id"])
+    if repo_id == "all":
+        ws["repos"] = []
+        return {"success": True, "message": "All repositories removed."}
     before = len(ws["repos"])
     ws["repos"] = [r for r in ws["repos"] if str(r.get("id")) != str(repo_id) and r.get("name") != repo_id and r.get("fullName") != repo_id]
     if len(ws["repos"]) == before:
