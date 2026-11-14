@@ -151,7 +151,7 @@ async function updateUser(id, data) {
 
 function getDefaultPipelines(repos) {
   const repoName = repos[0]?.name || 'campus-lost-found'
-  
+
   const repoFull = repos[0]?.fullName || 'studio/campus-lost-found'
   const now = Date.now()
 
@@ -385,7 +385,7 @@ function requireAuth(req, res, next) {
         req.auth = decoded
         return next()
       }
-    } catch {}
+    } catch { }
     return res.status(401).json({ success: false, message: 'Invalid or expired token.' })
   }
 }
@@ -584,8 +584,8 @@ app.post('/api/repositories/import', requireAuth, async (req, res) => {
     try {
       const bundle = await fetchRepoBundle(parsed.owner, parsed.repo, userToken)
       const isPrivate = bundle.meta?.private === true ||
-                        bundle.meta?.visibility === 'private' ||
-                        requestedVisibility === 'private'
+        bundle.meta?.visibility === 'private' ||
+        requestedVisibility === 'private'
       const visibility = isPrivate ? 'private' : 'public'
       const repo = {
         ...mapRepo(bundle.meta, {
@@ -604,8 +604,8 @@ app.post('/api/repositories/import', requireAuth, async (req, res) => {
       if (isFirestoreConnected()) {
         try {
           const db = getDB()
-          if (db) await db.collection('workspaces').doc(String(req.auth.id)).set({ repos: ws.repos, initialized: true }, { merge: true }).catch(() => {})
-        } catch (e) {}
+          if (db) await db.collection('workspaces').doc(String(req.auth.id)).set({ repos: ws.repos, initialized: true }, { merge: true }).catch(() => { })
+        } catch (e) { }
       }
       return res.status(201).json({ success: true, message: `Imported ${repo.fullName} from GitHub.`, data: repo })
     } catch (err) {
@@ -662,8 +662,8 @@ app.post('/api/repositories/import', requireAuth, async (req, res) => {
     if (isFirestoreConnected()) {
       try {
         const db = getDB()
-        if (db) await db.collection('workspaces').doc(String(req.auth.id)).set({ repos: ws.repos, initialized: true }, { merge: true }).catch(() => {})
-      } catch (e) {}
+        if (db) await db.collection('workspaces').doc(String(req.auth.id)).set({ repos: ws.repos, initialized: true }, { merge: true }).catch(() => { })
+      } catch (e) { }
     }
     return res.status(201).json({ success: true, message: `Created custom repository ${customRepo.name}.`, data: customRepo })
   }
@@ -756,15 +756,15 @@ app.delete('/api/repositories/all', requireAuth, async (req, res) => {
       try {
         const db = getDB()
         if (db) {
-          await db.collection('workspaces').doc(String(req.auth.id)).set({ repos: [], pipelines: [], initialized: true }, { merge: true }).catch(() => {})
+          await db.collection('workspaces').doc(String(req.auth.id)).set({ repos: [], pipelines: [], initialized: true }, { merge: true }).catch(() => { })
           const snap = await db.collection('repositories').get().catch(() => null)
           if (snap && !snap.empty) {
             for (const doc of snap.docs) {
-              await doc.ref.delete().catch(() => {})
+              await doc.ref.delete().catch(() => { })
             }
           }
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     return res.json({ success: true, message: 'All repositories removed successfully.', count: 0, data: [] })
@@ -786,15 +786,15 @@ app.delete('/api/repositories/:id', requireAuth, async (req, res) => {
         try {
           const db = getDB()
           if (db) {
-            await db.collection('workspaces').doc(String(req.auth.id)).set({ repos: [], pipelines: [], initialized: true }, { merge: true }).catch(() => {})
+            await db.collection('workspaces').doc(String(req.auth.id)).set({ repos: [], pipelines: [], initialized: true }, { merge: true }).catch(() => { })
             const snap = await db.collection('repositories').get().catch(() => null)
             if (snap && !snap.empty) {
               for (const doc of snap.docs) {
-                await doc.ref.delete().catch(() => {})
+                await doc.ref.delete().catch(() => { })
               }
             }
           }
-        } catch (e) {}
+        } catch (e) { }
       }
       return res.json({ success: true, message: 'All repositories removed successfully.', count: 0, data: [] })
     }
@@ -811,18 +811,18 @@ app.delete('/api/repositories/:id', requireAuth, async (req, res) => {
       try {
         const db = getDB()
         if (db) {
-          await db.collection('workspaces').doc(String(req.auth.id)).set({ repos: ws.repos, initialized: true }, { merge: true }).catch(() => {})
-          await db.collection('repositories').doc(idParam).delete().catch(() => {})
+          await db.collection('workspaces').doc(String(req.auth.id)).set({ repos: ws.repos, initialized: true }, { merge: true }).catch(() => { })
+          await db.collection('repositories').doc(idParam).delete().catch(() => { })
           if (removedRepo?.fullName) {
             const snap = await db.collection('repositories').where('fullName', '==', removedRepo.fullName).get().catch(() => null)
             if (snap && !snap.empty) {
               for (const doc of snap.docs) {
-                await doc.ref.delete().catch(() => {})
+                await doc.ref.delete().catch(() => { })
               }
             }
           }
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     if (ws.repos.length === before) return res.status(404).json({ success: false, message: 'Repository not found.' })
@@ -917,7 +917,7 @@ app.get('/api/analytics', requireAuth, async (req, res) => {
       try {
         const day = days[new Date(rawDate).getDay()]
         if (day) buckets[day].prs += 1
-      } catch {}
+      } catch { }
     })
     const recent30d = commits.filter((c) => c.date && Date.now() - new Date(c.date).getTime() < 30 * 86400000).length
     const mergedPRs = pulls.filter((p) => p.status === 'merged').length
@@ -1021,7 +1021,9 @@ app.get('/api/pipelines/:id', requireAuth, async (req, res) => {
         const db = getDB()
         const doc = await db.collection('pipeline_runs').doc(req.params.id).get()
         if (doc.exists) pipeline = { id: doc.id, ...doc.data() }
-      } catch {}
+      } catch { }
+
+
     }
 
     if (!pipeline) return res.status(404).json({ success: false, message: 'Pipeline run not found' })

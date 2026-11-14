@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useDeferredValue, useRef } from 'react'
 import {
   ReactFlow,
   Background,
@@ -7,6 +7,7 @@ import {
   Panel,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   MarkerType,
   Handle,
   Position,
@@ -44,7 +45,10 @@ import {
   ArrowUpRight,
   Repeat,
   Radio,
-  Unplug
+  Unplug,
+  Plus,
+  Minus,
+  Maximize2
 } from 'lucide-react'
 import {
   useFileFlowGraphQuery,
@@ -56,7 +60,7 @@ import { FileFlowNodeData } from '@/services/api'
 
 // ── Custom Node Components ─────────────────────────────────────
 
-function FileNodeComponent({ data, selected }: NodeProps) {
+const FileNodeComponent = React.memo(function FileNodeComponent({ data, selected }: NodeProps) {
   const nodeData = data as unknown as FileFlowNodeData
   const isSelected = selected
   const category = nodeData.category || 'frontend'
@@ -79,7 +83,7 @@ function FileNodeComponent({ data, selected }: NodeProps) {
         width: 270,
         borderRadius: '12px',
         padding: '12px 14px',
-        backgroundColor: '#141210',
+        backgroundColor: '#161412',
         border: isSelected
           ? '2px solid #E8D2B5'
           : isCircular
@@ -88,13 +92,12 @@ function FileNodeComponent({ data, selected }: NodeProps) {
           ? '1px dashed #EF4444'
           : `1px solid ${activeColor.border}`,
         boxShadow: isSelected
-          ? '0 0 26px rgba(232, 210, 181, 0.4), 0 8px 30px rgba(0,0,0,0.8)'
+          ? '0 0 20px rgba(232, 210, 181, 0.35), 0 4px 16px rgba(0,0,0,0.8)'
           : isCircular
-          ? '0 0 20px rgba(244, 63, 94, 0.35)'
-          : '0 4px 20px rgba(0, 0, 0, 0.6)',
-        transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
-        backdropFilter: 'blur(8px)',
-        cursor: 'pointer'
+          ? '0 0 16px rgba(244, 63, 94, 0.3)'
+          : '0 4px 14px rgba(0, 0, 0, 0.5)',
+        cursor: 'pointer',
+        contain: 'paint layout'
       }}
     >
       <Handle type="target" position={Position.Top} style={{ background: '#E8D2B5', width: 8, height: 8 }} />
@@ -257,9 +260,9 @@ function FileNodeComponent({ data, selected }: NodeProps) {
       <Handle type="source" position={Position.Bottom} style={{ background: '#E8D2B5', width: 8, height: 8 }} />
     </div>
   )
-}
+})
 
-function ApiNodeComponent({ data, selected }: NodeProps) {
+const ApiNodeComponent = React.memo(function ApiNodeComponent({ data, selected }: NodeProps) {
   const nodeData = data as unknown as FileFlowNodeData
   const isSelected = selected
   const method = (nodeData.method || 'GET').toUpperCase()
@@ -279,13 +282,13 @@ function ApiNodeComponent({ data, selected }: NodeProps) {
         width: 260,
         borderRadius: '12px',
         padding: '12px 14px',
-        backgroundColor: '#141210',
+        backgroundColor: '#161412',
         border: isSelected ? '2px solid #E8D2B5' : `1px solid ${methodColor.border}`,
         boxShadow: isSelected
-          ? '0 0 24px rgba(232, 210, 181, 0.35), 0 8px 30px rgba(0,0,0,0.8)'
-          : '0 4px 20px rgba(0, 0, 0, 0.6)',
-        backdropFilter: 'blur(8px)',
-        cursor: 'pointer'
+          ? '0 0 20px rgba(232, 210, 181, 0.35), 0 4px 16px rgba(0,0,0,0.8)'
+          : '0 4px 14px rgba(0, 0, 0, 0.5)',
+        cursor: 'pointer',
+        contain: 'paint layout'
       }}
     >
       <Handle type="target" position={Position.Top} style={{ background: '#34D399', width: 8, height: 8 }} />
@@ -348,7 +351,7 @@ function ApiNodeComponent({ data, selected }: NodeProps) {
   )
 }
 
-function DatabaseNodeComponent({ data, selected }: NodeProps) {
+const DatabaseNodeComponent = React.memo(function DatabaseNodeComponent({ data, selected }: NodeProps) {
   const nodeData = data as unknown as FileFlowNodeData
   const isSelected = selected
 
@@ -358,13 +361,13 @@ function DatabaseNodeComponent({ data, selected }: NodeProps) {
         width: 260,
         borderRadius: '12px',
         padding: '12px 14px',
-        backgroundColor: '#141210',
+        backgroundColor: '#161412',
         border: isSelected ? '2px solid #E8D2B5' : '1px solid rgba(245, 158, 11, 0.45)',
         boxShadow: isSelected
-          ? '0 0 24px rgba(232, 210, 181, 0.35), 0 8px 30px rgba(0,0,0,0.8)'
-          : '0 4px 20px rgba(0, 0, 0, 0.6)',
-        backdropFilter: 'blur(8px)',
-        cursor: 'pointer'
+          ? '0 0 20px rgba(232, 210, 181, 0.35), 0 4px 16px rgba(0,0,0,0.8)'
+          : '0 4px 14px rgba(0, 0, 0, 0.5)',
+        cursor: 'pointer',
+        contain: 'paint layout'
       }}
     >
       <Handle type="target" position={Position.Top} style={{ background: '#F59E0B', width: 8, height: 8 }} />
@@ -416,9 +419,9 @@ function DatabaseNodeComponent({ data, selected }: NodeProps) {
       <Handle type="source" position={Position.Bottom} style={{ background: '#F59E0B', width: 8, height: 8 }} />
     </div>
   )
-}
+})
 
-function MLNodeComponent({ data, selected }: NodeProps) {
+const MLNodeComponent = React.memo(function MLNodeComponent({ data, selected }: NodeProps) {
   const nodeData = data as unknown as FileFlowNodeData
   const isSelected = selected
 
@@ -428,13 +431,13 @@ function MLNodeComponent({ data, selected }: NodeProps) {
         width: 260,
         borderRadius: '12px',
         padding: '12px 14px',
-        backgroundColor: '#141210',
+        backgroundColor: '#161412',
         border: isSelected ? '2px solid #E8D2B5' : '1px solid rgba(139, 92, 246, 0.45)',
         boxShadow: isSelected
-          ? '0 0 24px rgba(232, 210, 181, 0.35), 0 8px 30px rgba(0,0,0,0.8)'
-          : '0 4px 20px rgba(0, 0, 0, 0.6)',
-        backdropFilter: 'blur(8px)',
-        cursor: 'pointer'
+          ? '0 0 20px rgba(232, 210, 181, 0.35), 0 4px 16px rgba(0,0,0,0.8)'
+          : '0 4px 14px rgba(0, 0, 0, 0.5)',
+        cursor: 'pointer',
+        contain: 'paint layout'
       }}
     >
       <Handle type="target" position={Position.Top} style={{ background: '#8B5CF6', width: 8, height: 8 }} />
@@ -485,6 +488,173 @@ function MLNodeComponent({ data, selected }: NodeProps) {
       <Handle type="source" position={Position.Bottom} style={{ background: '#8B5CF6', width: 8, height: 8 }} />
     </div>
   )
+})
+
+// ── Ultra-Prominent Zoom & View Toolbar ────────────────────────
+function ZoomToolbar() {
+  const { zoomIn, zoomOut, fitView, zoomTo, getZoom } = useReactFlow()
+  const [zoomPercent, setZoomPercent] = useState(100)
+
+  useEffect(() => {
+    const updateZoom = () => {
+      try {
+        const z = getZoom()
+        if (typeof z === 'number' && !isNaN(z)) {
+          setZoomPercent(Math.round(z * 100))
+        }
+      } catch {}
+    }
+    updateZoom()
+    const timer = setInterval(updateZoom, 200)
+    return () => clearInterval(timer)
+  }, [getZoom])
+
+  return (
+    <div
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '6px 8px',
+        backgroundColor: '#181614',
+        border: '1.5px solid rgba(232, 210, 181, 0.45)',
+        borderRadius: 12,
+        boxShadow: '0 8px 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(89, 9, 7, 0.4)',
+        userSelect: 'none'
+      }}
+    >
+      {/* Zoom In */}
+      <button
+        type="button"
+        onClick={() => zoomIn({ duration: 250 })}
+        title="Zoom In (Ctrl + Plus)"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 36,
+          height: 36,
+          borderRadius: 8,
+          backgroundColor: '#262220',
+          border: '1px solid rgba(232, 210, 181, 0.3)',
+          color: '#F5F5F4',
+          cursor: 'pointer',
+          transition: 'background-color 0.15s ease, border-color 0.15s ease'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = '#590907'
+          e.currentTarget.style.borderColor = '#E8D2B5'
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = '#262220'
+          e.currentTarget.style.borderColor = 'rgba(232, 210, 181, 0.3)'
+        }}
+      >
+        <Plus size={18} strokeWidth={2.5} />
+      </button>
+
+      {/* Zoom Percentage */}
+      <button
+        type="button"
+        onClick={() => zoomTo(1, { duration: 250 })}
+        title="Reset Zoom to 100%"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '0 10px',
+          height: 36,
+          borderRadius: 8,
+          backgroundColor: '#262220',
+          border: '1px solid rgba(232, 210, 181, 0.3)',
+          color: '#E8D2B5',
+          fontSize: '11px',
+          fontFamily: 'monospace',
+          fontWeight: 700,
+          cursor: 'pointer',
+          minWidth: 54,
+          transition: 'background-color 0.15s ease, border-color 0.15s ease'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = '#590907'
+          e.currentTarget.style.borderColor = '#E8D2B5'
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = '#262220'
+          e.currentTarget.style.borderColor = 'rgba(232, 210, 181, 0.3)'
+        }}
+      >
+        {zoomPercent}%
+      </button>
+
+      {/* Zoom Out */}
+      <button
+        type="button"
+        onClick={() => zoomOut({ duration: 250 })}
+        title="Zoom Out (Ctrl + Minus)"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 36,
+          height: 36,
+          borderRadius: 8,
+          backgroundColor: '#262220',
+          border: '1px solid rgba(232, 210, 181, 0.3)',
+          color: '#F5F5F4',
+          cursor: 'pointer',
+          transition: 'background-color 0.15s ease, border-color 0.15s ease'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = '#590907'
+          e.currentTarget.style.borderColor = '#E8D2B5'
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = '#262220'
+          e.currentTarget.style.borderColor = 'rgba(232, 210, 181, 0.3)'
+        }}
+      >
+        <Minus size={18} strokeWidth={2.5} />
+      </button>
+
+      {/* Divider */}
+      <div style={{ width: 1, height: 20, backgroundColor: 'rgba(255, 255, 255, 0.12)', margin: '0 2px' }} />
+
+      {/* Fit Screen */}
+      <button
+        type="button"
+        onClick={() => fitView({ duration: 350, padding: 0.2 })}
+        title="Fit All Files to Screen"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '0 12px',
+          height: 36,
+          borderRadius: 8,
+          backgroundColor: '#262220',
+          border: '1px solid rgba(232, 210, 181, 0.3)',
+          color: '#E8D2B5',
+          fontSize: '11px',
+          fontFamily: 'monospace',
+          fontWeight: 600,
+          cursor: 'pointer',
+          transition: 'background-color 0.15s ease, border-color 0.15s ease'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = '#590907'
+          e.currentTarget.style.borderColor = '#E8D2B5'
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = '#262220'
+          e.currentTarget.style.borderColor = 'rgba(232, 210, 181, 0.3)'
+        }}
+      >
+        <Maximize2 size={14} />
+        <span>Fit Screen</span>
+      </button>
+    </div>
+  )
 }
 
 const nodeTypes = {
@@ -499,6 +669,7 @@ const nodeTypes = {
 export default function FileFlow() {
   const [projectId] = useState('sycnops')
   const [searchQuery, setSearchQuery] = useState('')
+  const deferredSearch = useDeferredValue(searchQuery)
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'frontend' | 'backend' | 'database' | 'config' | 'disconnected' | 'circular'>('all')
   const [relationshipFilter, setRelationshipFilter] = useState<'all' | 'import' | 'http_request' | 'api_call' | 'db_operation'>('all')
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
@@ -529,6 +700,21 @@ export default function FileFlow() {
   // React Flow state
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
+
+  // Store user-dragged node coordinates to avoid layout recalculation thrashing
+  const nodePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map())
+
+  const handleNodesChange = useCallback(
+    (changes: any) => {
+      onNodesChange(changes)
+      for (const change of changes) {
+        if (change.type === 'position' && change.position) {
+          nodePositionsRef.current.set(change.id, change.position)
+        }
+      }
+    },
+    [onNodesChange]
+  )
 
   // Highlighted path IDs
   const activePathEdgeIds = useMemo(() => {
@@ -576,11 +762,11 @@ export default function FileFlow() {
     return { connectedNodeIds: nodesSet, connectedEdgeIds: edgesSet }
   }, [selectedNodeId, graphData])
 
-  // Synchronize graph data into React Flow
+  // Synchronize graph data into React Flow with ultra-smooth layout & edge optimization
   useEffect(() => {
     if (!graphData?.nodes) return
 
-    const lowerSearch = searchQuery.toLowerCase().trim()
+    const lowerSearch = deferredSearch.toLowerCase().trim()
 
     // 1. Filter Nodes by search and category
     const filteredNodes = graphData.nodes.filter((node) => {
@@ -608,17 +794,18 @@ export default function FileFlow() {
 
     const hasSelection = Boolean(selectedNodeId)
 
-    // 3. Map to Flow Nodes with Highlight Dimming
+    // 3. Map to Flow Nodes with Zero-lag Layout & Cached Coordinates
     const flowNodes: Node[] = filteredNodes.map((n, idx) => {
       const isSelected = n.id === selectedNodeId
       const isConnected = connectedNodeIds.has(n.id)
       const opacity = !hasSelection || isConnected ? 1 : 0.18
 
-      // Deterministic layout coordinates if position not specified
+      // Deterministic layout with persistent cached drag coordinates
+      const cachedPos = nodePositionsRef.current.get(n.id)
       const col = idx % 5
       const row = Math.floor(idx / 5)
-      const x = n.position?.x ?? col * 320 + 40
-      const y = n.position?.y ?? row * 200 + 40
+      const x = cachedPos?.x ?? n.position?.x ?? (col * 320 + 40)
+      const y = cachedPos?.y ?? n.position?.y ?? (row * 200 + 40)
 
       return {
         id: n.id,
@@ -628,13 +815,12 @@ export default function FileFlow() {
         selected: isSelected || n.id === sourceTraceNode || n.id === targetTraceNode,
         style: {
           opacity,
-          transition: 'opacity 0.25s ease, transform 0.2s ease',
           zIndex: isSelected ? 20 : isConnected ? 10 : 1
         }
       }
     })
 
-    // 4. Map to Flow Edges with Highlight Dimming
+    // 4. Map to Flow Edges with Streamlined Edge Animations (no continuous CPU loops)
     const flowEdges: Edge[] = filteredEdges.map((e) => {
       const isPathEdge = activePathEdgeIds.has(e.id)
       const isConnectedEdge = connectedEdgeIds.has(e.id)
@@ -658,24 +844,26 @@ export default function FileFlow() {
       const opacity = !hasSelection || isConnectedEdge || isPathEdge ? 1 : 0.08
       const strokeWidth = isPathEdge ? 3.5 : isConnectedEdge ? 2.5 : isHttpRequest ? 2 : 1.5
 
+      // Only animate edges actively selected or on traced path - saves massive CPU/GPU render loops!
+      const isAnimated = isPathEdge || (hasSelection && isConnectedEdge)
+
       return {
         id: e.id,
         source: e.source,
         target: e.target,
         type: 'smoothstep',
-        animated: isPathEdge || isConnectedEdge || isHttpRequest || isApiCall,
+        animated: isAnimated,
         label: isCircular
           ? '⚠️ Circular'
           : isHttpRequest
-          ? '⚡ HTTP Request'
+          ? '⚡ HTTP'
           : e.confidence === 'unresolved'
           ? '⚠️ unresolved'
           : e.label || '',
         style: {
           stroke: edgeColor,
           strokeWidth,
-          opacity,
-          transition: 'opacity 0.25s ease'
+          opacity
         },
         labelStyle: {
           fill: isCircular ? '#FB7185' : isHttpRequest ? '#38BDF8' : isConnectedEdge ? '#E8D2B5' : '#78716C',
@@ -696,7 +884,7 @@ export default function FileFlow() {
     setEdges(flowEdges)
   }, [
     graphData,
-    searchQuery,
+    deferredSearch,
     categoryFilter,
     relationshipFilter,
     selectedNodeId,
@@ -1119,23 +1307,23 @@ export default function FileFlow() {
             <ReactFlow
               nodes={nodes}
               edges={edges}
-              onNodesChange={onNodesChange}
+              onNodesChange={handleNodesChange}
               onEdgesChange={onEdgesChange}
               onNodeClick={onNodeClick}
               nodeTypes={nodeTypes}
               fitView
               minZoom={0.15}
-              maxZoom={2.2}
+              maxZoom={2.5}
+              onlyRenderVisibleElements={true}
+              elementsSelectable={true}
+              nodesDraggable={true}
+              nodesConnectable={false}
+              proOptions={{ hideAttribution: true }}
             >
               <Background color="#590907" gap={24} size={1} style={{ opacity: 0.15 }} />
-              <Controls
-                style={{
-                  backgroundColor: '#141210',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: 8,
-                  fill: '#E8D2B5'
-                }}
-              />
+              <Panel position="bottom-left" style={{ margin: '0 0 16px 16px', zIndex: 40 }}>
+                <ZoomToolbar />
+              </Panel>
               <MiniMap
                 nodeColor={(n) => {
                   if (n.type === 'apiNode') return '#34D399'
@@ -1575,6 +1763,51 @@ export default function FileFlow() {
           </div>
         )}
       </div>
+
+      {/* High-Performance Canvas & High-Visibility Zoom Controls Styling */}
+      <style>{`
+        .react-flow__controls {
+          box-shadow: 0 8px 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(89, 9, 7, 0.45) !important;
+          border-radius: 12px !important;
+          border: 1.5px solid rgba(232, 210, 181, 0.45) !important;
+          overflow: hidden !important;
+          background-color: #181614 !important;
+        }
+        .react-flow__controls-button {
+          background-color: #221E1C !important;
+          border-bottom: 1px solid rgba(232, 210, 181, 0.2) !important;
+          color: #F5F5F4 !important;
+          fill: #F5F5F4 !important;
+          width: 38px !important;
+          height: 38px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          transition: background-color 0.15s ease !important;
+        }
+        .react-flow__controls-button svg {
+          fill: #E8D2B5 !important;
+          stroke: #E8D2B5 !important;
+          width: 18px !important;
+          height: 18px !important;
+        }
+        .react-flow__controls-button:hover {
+          background-color: #590907 !important;
+        }
+        .react-flow__controls-button:hover svg {
+          fill: #FFFFFF !important;
+          stroke: #FFFFFF !important;
+        }
+        .react-flow__node {
+          will-change: transform;
+        }
+        .react-flow__pane {
+          cursor: grab;
+        }
+        .react-flow__pane:active {
+          cursor: grabbing;
+        }
+      `}</style>
     </div>
   )
 }
