@@ -1,5 +1,11 @@
-import React from 'react'
-import { signInWithPopup, GoogleAuthProvider, GithubAuthProvider } from 'firebase/auth'
+import React, { useState, useEffect } from 'react'
+import {
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  GoogleAuthProvider,
+  GithubAuthProvider
+} from 'firebase/auth'
 import { auth } from '../lib/firebase'
 import { socialLogin } from '../services/api'
 
@@ -60,8 +66,66 @@ async function firebaseGitHubSignIn() {
 }
 
 export default function SocialAuthButtons({ loading, onStart, onDone, onError, onSuccess }: Props) {
+  const [blockedProvider, setBlockedProvider] = useState<'google' | 'github' | null>(null)
+
+  // Listen for OAuth redirect return from Google / GitHub
+  useEffect(() => {
+    if (!auth) return
+    let isMounted = true
+
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (!result?.user || !isMounted) return
+        onStart()
+        const user = result.user
+        const provider = result.providerId?.includes('github') ? 'github' : 'google'
+        const email = user.email || `${user.displayName?.toLowerCase().replace(/\s+/g, '') ?? 'user'}@github.noreply`
+        const name = user.displayName || email.split('@')[0] || 'User'
+        const res = await socialLogin({ provider, email, name })
+        if (res.token) {
+          onSuccess(res.token, res.user)
+        } else {
+          onError(res.message || 'Social sign-in failed.')
+        }
+      })
+      .catch((err) => {
+        if (!isMounted) return
+        if (err?.code && err.code !== 'auth/popup-closed-by-user') {
+          onError(err.message || 'Redirect sign-in failed.')
+        }
+      })
+      .finally(() => {
+        if (isMounted) onDone()
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  const triggerRedirect = async (provider: 'google' | 'github') => {
+    if (!auth) {
+      onError('Firebase is not configured.')
+      return
+    }
+    onStart()
+    try {
+      const p = provider === 'google' ? new GoogleAuthProvider() : new GithubAuthProvider()
+      if (provider === 'google') {
+        p.addScope('email')
+        p.addScope('profile')
+      } else {
+        p.addScope('user:email')
+      }
+      await signInWithRedirect(auth, p)
+    } catch (err: any) {
+      onError(err.message || 'Failed to redirect to sign-in provider.')
+      onDone()
+    }
+  }
 
   const handleSocialAuth = async (provider: 'google' | 'github') => {
+    setBlockedProvider(null)
     onStart()
     try {
       const userInfo = provider === 'google'
@@ -87,7 +151,8 @@ export default function SocialAuthButtons({ loading, onStart, onDone, onError, o
       } else if (err?.code === 'auth/account-exists-with-different-credential') {
         onError('An account already exists with this email using a different sign-in method.')
       } else if (err?.code === 'auth/popup-blocked') {
-        onError('Popup was blocked by your browser. Please allow popups for this site.')
+        setBlockedProvider(provider)
+        onError('Popup was blocked by your browser. Click "Sign in via Redirect" below to bypass popups, or allow popups in your browser address bar.')
       } else {
         onError(err.message || `Failed to sign in with ${provider}.`)
       }
@@ -145,6 +210,27 @@ export default function SocialAuthButtons({ loading, onStart, onDone, onError, o
           </svg>
           Continue with GitHub
         </button>
+
+        {blockedProvider && (
+          <button
+            type="button"
+            id="btn-redirect-signin"
+            onClick={() => triggerRedirect(blockedProvider)}
+            disabled={loading}
+            style={{
+              ...btnStyle,
+              backgroundColor: 'rgba(16, 185, 129, 0.18)',
+              borderColor: '#10B981',
+              color: '#34D399',
+              fontWeight: 600,
+              boxShadow: '0 0 20px rgba(16, 185, 129, 0.3)',
+              padding: '14px 16px',
+              animation: 'count-pulse 2s ease-in-out infinite'
+            }}
+          >
+            <span>👉 Continue with {blockedProvider === 'google' ? 'Google' : 'GitHub'} via Redirect (Bypasses Popup Blocker)</span>
+          </button>
+        )}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', margin: '8px 0 24px', gap: '12px' }}>

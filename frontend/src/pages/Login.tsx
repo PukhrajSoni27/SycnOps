@@ -66,8 +66,13 @@ export default function Login() {
             }}
           />
           {error && (
-            <div style={{ backgroundColor: 'rgba(217, 83, 79, 0.1)', border: '1px solid rgba(217, 83, 79, 0.4)', color: '#d9534f', padding: '12px 16px', borderRadius: '4px', marginBottom: '24px', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
-              {error}
+            <div style={{ backgroundColor: 'rgba(217, 83, 79, 0.1)', border: '1px solid rgba(217, 83, 79, 0.4)', color: '#d9534f', padding: '12px 16px', borderRadius: '6px', marginBottom: '24px', fontFamily: 'var(--font-mono)', fontSize: '12px', lineHeight: '1.5' }}>
+              <div>{error}</div>
+              {error.toLowerCase().includes('popup') && (
+                <div style={{ marginTop: '8px', fontSize: '11px', color: '#A8A29E', borderTop: '1px solid rgba(217, 83, 79, 0.25)', paddingTop: '6px' }}>
+                  💡 <strong>Tip:</strong> In Chrome/Edge/Brave, look at the right end of your browser's URL address bar for the <strong>🚫 Pop-up blocked</strong> icon &rarr; click it &rarr; select <em>"Always allow pop-ups and redirects for http://localhost:3000"</em>, or click the green redirect button above.
+                </div>
+              )}
             </div>
           )}
           <form onSubmit={handleSubmit} className="s-form">
