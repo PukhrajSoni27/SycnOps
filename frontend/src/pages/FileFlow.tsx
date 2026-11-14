@@ -58,8 +58,8 @@ import {
 } from '@/hooks/useApi'
 import { FileFlowNodeData } from '@/services/api'
 
-// ── Custom Node Components ─────────────────────────────────────
 
+// ── Custom Node Components ─────────────────────────────────────
 const FileNodeComponent = React.memo(function FileNodeComponent({ data, selected }: NodeProps) {
   const nodeData = data as unknown as FileFlowNodeData
   const isSelected = selected
@@ -72,7 +72,7 @@ const FileNodeComponent = React.memo(function FileNodeComponent({ data, selected
     frontend: { bg: 'rgba(59, 130, 246, 0.15)', text: '#60A5FA', border: 'rgba(59, 130, 246, 0.45)' },
     backend: { bg: 'rgba(245, 158, 11, 0.15)', text: '#FBBF24', border: 'rgba(245, 158, 11, 0.45)' },
     database: { bg: 'rgba(16, 185, 129, 0.15)', text: '#34D399', border: 'rgba(16, 185, 129, 0.45)' },
-    config: { bg: 'rgba(168, 85, 247, 0.15)', text: '#C084FC', border: 'rgba(168, 85, 247, 0.45)' }
+    config: { bg: 'rgba(168, 85, 247, 0.15)', text: '#c489ffff', border: 'rgba(168, 85, 247, 0.45)' }
   }
 
   const activeColor = catColors[category] || catColors.frontend
