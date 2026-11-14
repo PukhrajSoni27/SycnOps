@@ -349,7 +349,7 @@ const ApiNodeComponent = React.memo(function ApiNodeComponent({ data, selected }
       <Handle type="source" position={Position.Bottom} style={{ background: '#34D399', width: 8, height: 8 }} />
     </div>
   )
-}
+})
 
 const DatabaseNodeComponent = React.memo(function DatabaseNodeComponent({ data, selected }: NodeProps) {
   const nodeData = data as unknown as FileFlowNodeData
