@@ -35,6 +35,7 @@ export default function CodeQuality() {
   const handleRunAudit = () => {
     setIsAuditing(true)
     setTimeout(() => {
+      refetch()
       setIsAuditing(false)
       setAuditSuccess(true)
       setTimeout(() => setAuditSuccess(false), 3000)
@@ -299,8 +300,34 @@ export default function CodeQuality() {
         }}
       >
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ fontSize: '12px', fontWeight: 600, color: '#E8D2B5', textTransform: 'uppercase' }}>
-            File-by-File Quality Audit ({filteredFiles.length})
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: '12px', fontWeight: 600, color: '#E8D2B5', textTransform: 'uppercase' }}>
+              File-by-File Quality Audit ({filteredFiles.length})
+            </div>
+            {/* Category Filter Pills */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {(['all', 'frontend', 'backend', 'database'] as const).map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setSelectedCategory(cat)}
+                  style={{
+                    padding: '3px 8px',
+                    borderRadius: 6,
+                    fontSize: '10px',
+                    fontFamily: 'monospace',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    backgroundColor: selectedCategory === cat ? '#590907' : 'rgba(255, 255, 255, 0.04)',
+                    color: selectedCategory === cat ? '#E8D2B5' : '#78716C',
+                    border: selectedCategory === cat ? '1px solid rgba(232, 210, 181, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Search */}

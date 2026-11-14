@@ -232,7 +232,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
         <div style={{ marginTop: 'auto', padding: '0 24px' }}>
           <div style={{ fontFamily: 'var(--font-tech)', fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '.2em', textTransform: 'uppercase' }}>
-            VERSION 2.0.26
+            VERSION 2.0.28
           </div>
         </div>
       </aside>

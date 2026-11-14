@@ -81,9 +81,17 @@ export default function FileTopology() {
   const { data: files = [], isLoading } = useFileFlowFilesQuery(projectId)
   const { data: graphData } = useFileFlowGraphQuery(projectId)
 
+  const filteredFiles = useMemo(() => {
+    if (activeModuleFilter === 'all') return files
+    return files.filter((f) => {
+      const cat = f.category || (f.path?.startsWith('frontend') ? 'frontend' : 'backend')
+      return cat === activeModuleFilter
+    })
+  }, [files, activeModuleFilter])
+
   const tree = useMemo(() => {
-    return buildTree(files)
-  }, [files])
+    return buildTree(filteredFiles)
+  }, [filteredFiles])
 
   const toggleExpand = (path: string) => {
     setExpandedPaths((prev) => {
@@ -295,32 +303,87 @@ export default function FileTopology() {
           marginBottom: 16
         }}
       >
-        <div style={{ padding: '10px 14px', borderRadius: 12, backgroundColor: '#141210', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-          <div style={{ fontSize: '10px', color: '#78716C', textTransform: 'uppercase' }}>Total Files</div>
+        <div
+          onClick={() => setActiveModuleFilter('all')}
+          style={{
+            padding: '10px 14px',
+            borderRadius: 12,
+            backgroundColor: activeModuleFilter === 'all' ? 'rgba(89, 9, 7, 0.45)' : '#141210',
+            border: activeModuleFilter === 'all' ? '1px solid #E8D2B5' : '1px solid rgba(255, 255, 255, 0.08)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+          title="Show all files"
+        >
+          <div style={{ fontSize: '10px', color: activeModuleFilter === 'all' ? '#E8D2B5' : '#78716C', textTransform: 'uppercase' }}>All Files</div>
           <div style={{ fontSize: '18px', fontWeight: 700, color: '#F5F5F4', fontFamily: 'monospace' }}>
             {files.length}
           </div>
         </div>
-        <div style={{ padding: '10px 14px', borderRadius: 12, backgroundColor: '#141210', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-          <div style={{ fontSize: '10px', color: '#78716C', textTransform: 'uppercase' }}>Frontend Files</div>
+        <div
+          onClick={() => setActiveModuleFilter('frontend')}
+          style={{
+            padding: '10px 14px',
+            borderRadius: 12,
+            backgroundColor: activeModuleFilter === 'frontend' ? 'rgba(59, 130, 246, 0.2)' : '#141210',
+            border: activeModuleFilter === 'frontend' ? '1px solid #60A5FA' : '1px solid rgba(255, 255, 255, 0.08)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+          title="Filter by frontend files"
+        >
+          <div style={{ fontSize: '10px', color: activeModuleFilter === 'frontend' ? '#60A5FA' : '#78716C', textTransform: 'uppercase' }}>Frontend Files</div>
           <div style={{ fontSize: '18px', fontWeight: 700, color: '#60A5FA', fontFamily: 'monospace' }}>
             {moduleCounts.frontend}
           </div>
         </div>
-        <div style={{ padding: '10px 14px', borderRadius: 12, backgroundColor: '#141210', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-          <div style={{ fontSize: '10px', color: '#78716C', textTransform: 'uppercase' }}>Backend Files</div>
+        <div
+          onClick={() => setActiveModuleFilter('backend')}
+          style={{
+            padding: '10px 14px',
+            borderRadius: 12,
+            backgroundColor: activeModuleFilter === 'backend' ? 'rgba(245, 158, 11, 0.2)' : '#141210',
+            border: activeModuleFilter === 'backend' ? '1px solid #FBBF24' : '1px solid rgba(255, 255, 255, 0.08)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+          title="Filter by backend files"
+        >
+          <div style={{ fontSize: '10px', color: activeModuleFilter === 'backend' ? '#FBBF24' : '#78716C', textTransform: 'uppercase' }}>Backend Files</div>
           <div style={{ fontSize: '18px', fontWeight: 700, color: '#FBBF24', fontFamily: 'monospace' }}>
             {moduleCounts.backend}
           </div>
         </div>
-        <div style={{ padding: '10px 14px', borderRadius: 12, backgroundColor: '#141210', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-          <div style={{ fontSize: '10px', color: '#78716C', textTransform: 'uppercase' }}>Database Models</div>
+        <div
+          onClick={() => setActiveModuleFilter('database')}
+          style={{
+            padding: '10px 14px',
+            borderRadius: 12,
+            backgroundColor: activeModuleFilter === 'database' ? 'rgba(16, 185, 129, 0.2)' : '#141210',
+            border: activeModuleFilter === 'database' ? '1px solid #34D399' : '1px solid rgba(255, 255, 255, 0.08)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+          title="Filter by database models"
+        >
+          <div style={{ fontSize: '10px', color: activeModuleFilter === 'database' ? '#34D399' : '#78716C', textTransform: 'uppercase' }}>Database Models</div>
           <div style={{ fontSize: '18px', fontWeight: 700, color: '#34D399', fontFamily: 'monospace' }}>
             {moduleCounts.database}
           </div>
         </div>
-        <div style={{ padding: '10px 14px', borderRadius: 12, backgroundColor: '#141210', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-          <div style={{ fontSize: '10px', color: '#78716C', textTransform: 'uppercase' }}>Configs / Manifests</div>
+        <div
+          onClick={() => setActiveModuleFilter('config')}
+          style={{
+            padding: '10px 14px',
+            borderRadius: 12,
+            backgroundColor: activeModuleFilter === 'config' ? 'rgba(168, 85, 247, 0.2)' : '#141210',
+            border: activeModuleFilter === 'config' ? '1px solid #C084FC' : '1px solid rgba(255, 255, 255, 0.08)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+          title="Filter by configs and manifests"
+        >
+          <div style={{ fontSize: '10px', color: activeModuleFilter === 'config' ? '#C084FC' : '#78716C', textTransform: 'uppercase' }}>Configs / Manifests</div>
           <div style={{ fontSize: '18px', fontWeight: 700, color: '#C084FC', fontFamily: 'monospace' }}>
             {moduleCounts.config}
           </div>

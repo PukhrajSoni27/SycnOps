@@ -2,12 +2,12 @@ import React, { useState, useEffect, useMemo, useCallback, useDeferredValue, use
 import {
   ReactFlow,
   Background,
-  Controls,
   MiniMap,
   Panel,
   useNodesState,
   useEdgesState,
   useReactFlow,
+  ReactFlowProvider,
   MarkerType,
   Handle,
   Position,
@@ -666,7 +666,7 @@ const nodeTypes = {
 
 // ── Main Page Component ────────────────────────────────────────
 
-export default function FileFlow() {
+function FileFlowContent() {
   const [projectId] = useState('sycnops')
   const [searchQuery, setSearchQuery] = useState('')
   const deferredSearch = useDeferredValue(searchQuery)
@@ -1809,5 +1809,13 @@ export default function FileFlow() {
         }
       `}</style>
     </div>
+  )
+}
+
+export default function FileFlow() {
+  return (
+    <ReactFlowProvider>
+      <FileFlowContent />
+    </ReactFlowProvider>
   )
 }
