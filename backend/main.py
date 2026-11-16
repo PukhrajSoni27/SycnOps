@@ -1,6 +1,8 @@
 """SycnOps FastAPI backend — same routes as index.js, live GitHub data."""
 from __future__ import annotations
 
+import asyncio
+import json
 import os
 import re
 import secrets
@@ -15,6 +17,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr
+
+# Ensure services module is findable
+import sys
+_BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+
+from services.topology_service import (
+    run_topology_analysis,
+    get_topology_tree_data,
+    get_topology_dependencies_data,
+    get_topology_file_metadata,
+)
 
 try:
     from dotenv import load_dotenv
@@ -32,6 +47,31 @@ pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 users: list[dict] = []
 workspaces: dict[str, dict] = {}
 firebase_db = None
+
+WORKSPACE_CACHE_FILE = os.path.join(os.path.dirname(__file__), ".workspace_cache.json")
+
+
+def load_cached_workspaces():
+    global workspaces
+    if os.path.exists(WORKSPACE_CACHE_FILE):
+        try:
+            with open(WORKSPACE_CACHE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    workspaces.update(data)
+        except Exception as e:
+            print(f"Notice loading workspace cache: {e}")
+
+
+def save_cached_workspaces():
+    try:
+        with open(WORKSPACE_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(workspaces, f, indent=2)
+    except Exception as e:
+        print(f"Notice saving workspace cache: {e}")
+
+
+load_cached_workspaces()
 
 
 def init_firebase():
@@ -482,6 +522,18 @@ async def import_repo(body: ImportBody, user: dict = Depends(auth_user)):
         repo["pulls"] = bundle["pulls"]
         repo["commits"] = bundle["commits"]
         ws["repos"].insert(0, repo)
+        save_cached_workspaces()
+        # Trigger real-time File Topology analysis in the background
+        try:
+            asyncio.create_task(run_topology_analysis(
+                repo_meta=repo,
+                user_id=user["id"],
+                project_id=str(repo["id"]),
+                token=getattr(body, "githubToken", None),
+                force_rescan=True
+            ))
+        except Exception as e:
+            print(f"Background topology scan notice: {e}")
         return {"success": True, "message": f"Imported {repo['fullName']} from GitHub.", "data": repo}
     except HTTPException:
         raise
@@ -677,6 +729,7 @@ async def repo_analysis(repo_id: str, user: dict = Depends(auth_user)):
 def delete_all_repos(user: dict = Depends(auth_user)):
     ws = workspace(user["id"])
     ws["repos"] = []
+    save_cached_workspaces()
     return {"success": True, "message": "All repositories removed."}
 
 
@@ -685,11 +738,13 @@ def delete_repo(repo_id: str, user: dict = Depends(auth_user)):
     ws = workspace(user["id"])
     if repo_id == "all":
         ws["repos"] = []
+        save_cached_workspaces()
         return {"success": True, "message": "All repositories removed."}
     before = len(ws["repos"])
     ws["repos"] = [r for r in ws["repos"] if str(r.get("id")) != str(repo_id) and r.get("name") != repo_id and r.get("fullName") != repo_id]
     if len(ws["repos"]) == before:
         json_error(404, "Repository not found.")
+    save_cached_workspaces()
     return {"success": True, "message": "Repository removed."}
 
 
@@ -1299,6 +1354,132 @@ def run_repo_analysis_pipeline(body: dict = None, user: dict = Depends(auth_user
     if repo:
         repo["pipeline"] = data
     return {"success": True, "message": "Repository analysis pipeline executed.", "data": data}
+
+
+# ── File Topology Endpoints ───────────────────────────────────────────────────
+
+def resolve_project_repo(ws: dict, project_id: str) -> Optional[dict]:
+    repos = ws.get("repos", [])
+    if not repos:
+        return None
+    if project_id in {"sycnops", "active", "default", "current", ""}:
+        return repos[0]
+    return next((r for r in repos if str(r.get("id")) == str(project_id) or r.get("name") == project_id or r.get("fullName") == project_id), None)
+
+
+@app.get("/api/projects/{projectId}/topology")
+async def get_project_topology_endpoint(
+    projectId: str,
+    user: dict = Depends(auth_user),
+    x_github_token: Optional[str] = Header(None)
+):
+    ws = workspace(user["id"])
+    repo = resolve_project_repo(ws, projectId)
+
+    # If no imported repo exists and user requested sycnops/default, scan local project
+    if not repo and projectId not in {"sycnops", "active", "default", "current", ""}:
+        raise HTTPException(
+            status_code=404,
+            detail={"success": False, "message": f"No imported repository matching '{projectId}' found in your workspace."}
+        )
+
+    try:
+        resolved_id = str(repo["id"]) if repo else projectId
+        data = await run_topology_analysis(
+            repo_meta=repo,
+            user_id=user["id"],
+            project_id=resolved_id,
+            token=x_github_token,
+            force_rescan=False
+        )
+        return {"success": True, "data": data}
+    except Exception as err:
+        raise HTTPException(status_code=500, detail={"success": False, "message": f"File topology analysis failed: {str(err)}"})
+
+
+@app.get("/api/projects/{projectId}/topology/tree")
+async def get_project_topology_tree_endpoint(
+    projectId: str,
+    user: dict = Depends(auth_user),
+    x_github_token: Optional[str] = Header(None)
+):
+    ws = workspace(user["id"])
+    repo = resolve_project_repo(ws, projectId)
+    resolved_id = str(repo["id"]) if repo else projectId
+
+    await run_topology_analysis(
+        repo_meta=repo,
+        user_id=user["id"],
+        project_id=resolved_id,
+        token=x_github_token,
+        force_rescan=False
+    )
+    tree_data = get_topology_tree_data(resolved_id, user["id"])
+    if not tree_data:
+        raise HTTPException(status_code=404, detail={"success": False, "message": "Tree topology not found."})
+    return {"success": True, "data": tree_data}
+
+
+@app.get("/api/projects/{projectId}/topology/dependencies")
+async def get_project_topology_dependencies_endpoint(
+    projectId: str,
+    user: dict = Depends(auth_user),
+    x_github_token: Optional[str] = Header(None)
+):
+    ws = workspace(user["id"])
+    repo = resolve_project_repo(ws, projectId)
+    resolved_id = str(repo["id"]) if repo else projectId
+
+    await run_topology_analysis(
+        repo_meta=repo,
+        user_id=user["id"],
+        project_id=resolved_id,
+        token=x_github_token,
+        force_rescan=False
+    )
+    dep_data = get_topology_dependencies_data(resolved_id, user["id"])
+    if not dep_data:
+        raise HTTPException(status_code=404, detail={"success": False, "message": "Dependencies topology not found."})
+    return {"success": True, "data": dep_data}
+
+
+@app.get("/api/projects/{projectId}/topology/file/{fileId:path}")
+async def get_project_topology_file_endpoint(
+    projectId: str,
+    fileId: str,
+    user: dict = Depends(auth_user)
+):
+    ws = workspace(user["id"])
+    repo = resolve_project_repo(ws, projectId)
+    resolved_id = str(repo["id"]) if repo else projectId
+
+    file_meta = get_topology_file_metadata(resolved_id, fileId, user["id"])
+    if not file_meta:
+        raise HTTPException(status_code=404, detail={"success": False, "message": f"File '{fileId}' not found in topology."})
+    return {"success": True, "data": file_meta}
+
+
+@app.post("/api/projects/{projectId}/topology/rescan")
+async def rescan_project_topology_endpoint(
+    projectId: str,
+    user: dict = Depends(auth_user),
+    x_github_token: Optional[str] = Header(None)
+):
+    ws = workspace(user["id"])
+    repo = resolve_project_repo(ws, projectId)
+    resolved_id = str(repo["id"]) if repo else projectId
+
+    try:
+        data = await run_topology_analysis(
+            repo_meta=repo,
+            user_id=user["id"],
+            project_id=resolved_id,
+            token=x_github_token,
+            force_rescan=True
+        )
+        return {"success": True, "message": "Topology rescan completed successfully.", "data": data}
+    except Exception as err:
+        raise HTTPException(status_code=500, detail={"success": False, "message": f"Rescan failed: {str(err)}"})
 
 
 if __name__ == "__main__":

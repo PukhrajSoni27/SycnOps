@@ -495,3 +495,95 @@ export async function fetchFileFlowPaths(
   )
   return json.data || []
 }
+
+// ── File Topology Interfaces & API Clients ───────────────────────────────────
+
+export interface TopologyTreeNode {
+  id: string
+  name: string
+  path: string
+  isDirectory: boolean
+  extension?: string
+  language?: string
+  languageColor?: string
+  category?: 'frontend' | 'backend' | 'database' | 'components' | 'utilities' | 'configuration' | 'documentation' | 'middleware' | string
+  role?: string
+  sizeBytes?: number
+  linesCount?: number
+  isEntryPoint?: boolean
+  isManifest?: boolean
+  isSensitive?: boolean
+  inDegree?: number
+  outDegree?: number
+  hasCircularDep?: boolean
+  imports?: string[]
+  exports?: string[]
+  children?: TopologyTreeNode[]
+  fileCount?: number
+  folderCount?: number
+  totalLines?: number
+  totalSize?: number
+}
+
+export interface TopologySummary {
+  totalFiles: number
+  totalFolders: number
+  totalLines: number
+  totalSizeBytes: number
+  languages: Record<string, { count: number; lines: number; percentage: number; color?: string }>
+  categories: Record<string, number>
+  circularDependencies: string[][]
+  circularFilesCount?: number
+  entryPoints: string[]
+  manifests: string[]
+  totalEdges: number
+}
+
+export interface TopologyData {
+  projectId: string
+  repositoryId?: string
+  analysisId?: string
+  scanTimestamp?: string
+  summary: TopologySummary
+  tree: TopologyTreeNode
+  nodes: any[]
+  edges: any[]
+  files: any[]
+}
+
+export interface TopologyFileDetail {
+  projectId: string
+  file: any
+  incomingDependencies: string[]
+  outgoingDependencies: string[]
+  inDegree: number
+  outDegree: number
+}
+
+export async function fetchTopology(projectId = 'sycnops'): Promise<TopologyData> {
+  const json = await api(`/projects/${encodeURIComponent(projectId)}/topology`)
+  return json.data
+}
+
+export async function fetchTopologyTree(projectId = 'sycnops'): Promise<{ tree: TopologyTreeNode; summary: TopologySummary }> {
+  const json = await api(`/projects/${encodeURIComponent(projectId)}/topology/tree`)
+  return json.data
+}
+
+export async function fetchTopologyDependencies(projectId = 'sycnops'): Promise<any> {
+  const json = await api(`/projects/${encodeURIComponent(projectId)}/topology/dependencies`)
+  return json.data
+}
+
+export async function fetchTopologyFile(projectId: string, fileId: string): Promise<TopologyFileDetail> {
+  const json = await api(`/projects/${encodeURIComponent(projectId)}/topology/file/${encodeURIComponent(fileId)}`)
+  return json.data
+}
+
+export async function rescanTopology(projectId = 'sycnops'): Promise<TopologyData> {
+  const json = await api(`/projects/${encodeURIComponent(projectId)}/topology/rescan`, {
+    method: 'POST'
+  })
+  return json.data
+}
+

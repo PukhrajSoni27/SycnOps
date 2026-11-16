@@ -32,6 +32,7 @@ import {
   getFileDetails,
   findGraphPaths
 } from './lib/fileFlowScanner.js'
+import { getOrGenerateTopology } from './lib/topologyScanner.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: path.join(__dirname, 'backend.env') })
@@ -1194,6 +1195,100 @@ app.get('/api/file-flow/paths', requireAuth, async (req, res) => {
     const analysis = await getLatestFileFlowAnalysis(projectId)
     const paths = findGraphPaths(source, target, analysis.edges || [])
     return res.json({ success: true, count: paths.length, data: paths })
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message })
+  }
+})
+
+// ── File Topology Endpoints ────────────────────────────────────
+
+app.get('/api/projects/:projectId/topology', requireAuth, async (req, res) => {
+  try {
+    const { projectId } = req.params
+    const topology = await getOrGenerateTopology(projectId, req.user?.id)
+    return res.json({ success: true, data: topology })
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message })
+  }
+})
+
+app.get('/api/projects/:projectId/topology/tree', requireAuth, async (req, res) => {
+  try {
+    const { projectId } = req.params
+    const topology = await getOrGenerateTopology(projectId, req.user?.id)
+    return res.json({
+      success: true,
+      data: {
+        projectId,
+        analysisId: topology.analysisId,
+        scanTimestamp: topology.scanTimestamp,
+        summary: topology.summary,
+        tree: topology.tree
+      }
+    })
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message })
+  }
+})
+
+app.get('/api/projects/:projectId/topology/dependencies', requireAuth, async (req, res) => {
+  try {
+    const { projectId } = req.params
+    const topology = await getOrGenerateTopology(projectId, req.user?.id)
+    return res.json({
+      success: true,
+      data: {
+        projectId,
+        analysisId: topology.analysisId,
+        scanTimestamp: topology.scanTimestamp,
+        circularDependencies: topology.summary?.circularDependencies || [],
+        manifests: topology.summary?.manifests || [],
+        edges: topology.edges || [],
+        totalEdges: (topology.edges || []).length
+      }
+    })
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message })
+  }
+})
+
+app.get('/api/projects/:projectId/topology/file/*', requireAuth, async (req, res) => {
+  try {
+    const { projectId } = req.params
+    const fileId = req.params[0]
+    const topology = await getOrGenerateTopology(projectId, req.user?.id)
+    const file = (topology.files || []).find(f => f.path === fileId || f.name === fileId)
+    if (!file) {
+      return res.status(404).json({ success: false, message: `File '${fileId}' not found.` })
+    }
+    const incoming = (topology.edges || [])
+      .filter(e => (e.data?.targetPath || e.target) === file.path)
+      .map(e => e.data?.sourcePath || e.source)
+    const outgoing = (topology.edges || [])
+      .filter(e => (e.data?.sourcePath || e.source) === file.path)
+      .map(e => e.data?.targetPath || e.target)
+
+    return res.json({
+      success: true,
+      data: {
+        projectId,
+        file,
+        incomingDependencies: incoming,
+        outgoingDependencies: outgoing,
+        inDegree: incoming.length,
+        outDegree: outgoing.length
+      }
+    })
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message })
+  }
+})
+
+app.post('/api/projects/:projectId/topology/rescan', requireAuth, async (req, res) => {
+  try {
+    const { projectId } = req.params
+    const topology = await getOrGenerateTopology(projectId, req.user?.id, true)
+    return res.json({ success: true, message: 'Topology rescan completed.', data: topology })
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message })
   }

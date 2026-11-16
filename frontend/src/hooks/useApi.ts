@@ -19,7 +19,12 @@ import {
   fetchFileFlowGraph,
   fetchFileFlowFiles,
   fetchFileDetails,
-  fetchFileFlowPaths
+  fetchFileFlowPaths,
+  fetchTopology,
+  fetchTopologyTree,
+  fetchTopologyDependencies,
+  fetchTopologyFile,
+  rescanTopology
 } from '@/services/api'
 
 export function useRepositoriesQuery() {
@@ -201,6 +206,53 @@ export function useFileFlowPathsQuery(source: string | null, target: string | nu
     enabled: Boolean(source && target)
   })
 }
+
+// ── File Topology React Query Hooks ──────────────────────────────────────────
+
+export function useTopologyQuery(projectId = 'sycnops') {
+  return useQuery({
+    queryKey: ['topology', projectId],
+    queryFn: () => fetchTopology(projectId),
+    staleTime: 60000
+  })
+}
+
+export function useTopologyTreeQuery(projectId = 'sycnops') {
+  return useQuery({
+    queryKey: ['topology-tree', projectId],
+    queryFn: () => fetchTopologyTree(projectId),
+    staleTime: 60000
+  })
+}
+
+export function useTopologyDependenciesQuery(projectId = 'sycnops') {
+  return useQuery({
+    queryKey: ['topology-dependencies', projectId],
+    queryFn: () => fetchTopologyDependencies(projectId),
+    staleTime: 60000
+  })
+}
+
+export function useTopologyFileQuery(projectId: string, fileId: string | null) {
+  return useQuery({
+    queryKey: ['topology-file', projectId, fileId],
+    queryFn: () => (fileId ? fetchTopologyFile(projectId, fileId) : null),
+    enabled: Boolean(fileId)
+  })
+}
+
+export function useRescanTopologyMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (projectId: string) => rescanTopology(projectId),
+    onSuccess: (_, projectId) => {
+      queryClient.invalidateQueries({ queryKey: ['topology', projectId] })
+      queryClient.invalidateQueries({ queryKey: ['topology-tree', projectId] })
+      queryClient.invalidateQueries({ queryKey: ['topology-dependencies', projectId] })
+    }
+  })
+}
+
 
 
 
