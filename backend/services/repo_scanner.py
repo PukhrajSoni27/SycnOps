@@ -170,6 +170,22 @@ async def scan_github_repository(
                 res = await client.get(tree_url, headers=headers)
 
         if res.status_code != 200:
+            # If GitHub API fails (e.g. Rate Limit 403 or network restriction), fallback to shallow git clone
+            cache_base = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".repos_cache")
+            clone_dir = os.path.join(cache_base, repo)
+            if not os.path.exists(clone_dir):
+                try:
+                    os.makedirs(cache_base, exist_ok=True)
+                    import subprocess
+                    clone_url = f"https://github.com/{owner}/{repo}.git"
+                    print(f"GitHub API returned {res.status_code}. Performing shallow clone fallback for {owner}/{repo}...")
+                    subprocess.run(["git", "clone", "--depth", "1", clone_url, clone_dir], capture_output=True, timeout=40)
+                except Exception as err:
+                    print(f"Git shallow clone fallback notice: {err}")
+
+            if os.path.exists(clone_dir):
+                return await scan_local_repository(clone_dir)
+
             if res.status_code == 403:
                 try:
                     err_msg = res.json().get("message", "")

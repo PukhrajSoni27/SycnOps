@@ -39,6 +39,10 @@ serviceAccountKey.json
 # Workspace Cache
 .workspace_cache.json
 backend/.workspace_cache.json
+.topology_cache.json
+backend/.topology_cache.json
+.repos_cache/
+backend/.repos_cache/
 
 # Editor directories and files
 .vscode/*
