@@ -32,6 +32,12 @@ export default defineConfig({
             }
           })
         }
+      },
+      // Reverse-proxy Firebase Auth handler for local redirect compatibility (bypasses third-party cookie restrictions)
+      '/__/auth': {
+        target: 'https://sycnops-cd9af.firebaseapp.com',
+        changeOrigin: true,
+        secure: true
       }
     }
   },

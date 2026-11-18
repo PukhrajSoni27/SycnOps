@@ -5,9 +5,9 @@ Detects programming languages and file types for repository files.
 Maps file extensions, filenames, and special patterns to clean language metadata.
 """
 
-from typing import Dict, Any
+from typing import Any
 
-LANGUAGE_MAP: Dict[str, Dict[str, Any]] = {
+LANGUAGE_MAP: dict[str, dict[str, Any]] = {
     ".ts": {"language": "TypeScript", "is_code": True, "color": "#3178C6"},
     ".tsx": {"language": "TypeScript (React)", "is_code": True, "color": "#2D79C7"},
     ".js": {"language": "JavaScript", "is_code": True, "color": "#F7DF1E"},
@@ -50,7 +50,7 @@ LANGUAGE_MAP: Dict[str, Dict[str, Any]] = {
     ".proto": {"language": "Protocol Buffers", "is_code": True, "color": "#4F8C9D"},
 }
 
-EXACT_FILENAME_MAP: Dict[str, Dict[str, Any]] = {
+EXACT_FILENAME_MAP: dict[str, dict[str, Any]] = {
     "dockerfile": {"language": "Docker", "is_code": True, "color": "#384D54"},
     "docker-compose.yml": {"language": "Docker Compose", "is_code": False, "color": "#384D54"},
     "docker-compose.yaml": {"language": "Docker Compose", "is_code": False, "color": "#384D54"},
@@ -63,7 +63,7 @@ EXACT_FILENAME_MAP: Dict[str, Dict[str, Any]] = {
 }
 
 
-def detect_language(file_path: str) -> Dict[str, Any]:
+def detect_language(file_path: str) -> dict[str, Any]:
     """
     Detects language, code status, and color for a given file path.
     """

@@ -6,9 +6,9 @@ Resolves relative and aliased import specifiers to real repository file paths.
 Performs Tarjan's SCC / DFS cycle detection to detect circular dependency loops.
 """
 
-import re
 import posixpath
-from typing import Dict, List, Set, Any, Tuple
+import re
+from typing import Any
 
 # Regex patterns for JavaScript / TypeScript imports and exports
 JS_IMPORT_PATTERNS = [
@@ -41,7 +41,7 @@ def normalize_path(p: str) -> str:
     return p.replace("\\", "/").strip().strip("/")
 
 
-def resolve_import_path(source_file: str, specifier: str, known_files: Set[str]) -> Tuple[str, bool]:
+def resolve_import_path(source_file: str, specifier: str, known_files: set[str]) -> tuple[str, bool]:
     """
     Resolves an import specifier from source_file against the known project files.
     Returns (resolved_path, is_external).
@@ -92,16 +92,16 @@ def resolve_import_path(source_file: str, specifier: str, known_files: Set[str])
     return (unresolved_target, False)
 
 
-def extract_imports_and_exports(file_path: str, content: str, known_files: Set[str]) -> Dict[str, Any]:
+def extract_imports_and_exports(file_path: str, content: str, known_files: set[str]) -> dict[str, Any]:
     """
     Parses file content to extract imports, exports, and internal dependencies.
     """
     norm_path = normalize_path(file_path)
     lower = norm_path.lower()
 
-    internal_deps: Set[str] = set()
-    external_deps: Set[str] = set()
-    exports: Set[str] = set()
+    internal_deps: set[str] = set()
+    external_deps: set[str] = set()
+    exports: set[str] = set()
 
     if not content:
         return {
@@ -162,15 +162,15 @@ def extract_imports_and_exports(file_path: str, content: str, known_files: Set[s
     }
 
 
-def find_circular_dependencies(adj_list: Dict[str, List[str]]) -> List[List[str]]:
+def find_circular_dependencies(adj_list: dict[str, list[str]]) -> list[list[str]]:
     """
     Detects circular dependency cycles using Depth-First Search (DFS) with path tracking.
     Returns a list of cycles, e.g. [['a.ts', 'b.ts', 'a.ts']].
     """
-    visited: Set[str] = set()
-    rec_stack: List[str] = []
-    cycles: List[List[str]] = []
-    seen_cycle_fingerprints: Set[Tuple[str, ...]] = set()
+    visited: set[str] = set()
+    rec_stack: list[str] = []
+    cycles: list[list[str]] = []
+    seen_cycle_fingerprints: set[tuple[str, ...]] = set()
 
     def dfs(node: str):
         visited.add(node)

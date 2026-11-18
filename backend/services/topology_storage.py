@@ -6,14 +6,14 @@ Integrates with MongoDB Atlas (if MONGODB_URI is configured),
 Firebase Firestore (collection `file_topology`), and local disk cache fallback.
 """
 
-import os
 import json
+import os
 import time
-from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 # In-memory session cache for rapid lookups
-_IN_MEMORY_TOPOLOGY: Dict[str, Dict[str, Any]] = {}
+_IN_MEMORY_TOPOLOGY: dict[str, dict[str, Any]] = {}
 
 CACHE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CACHE_FILE = os.path.join(CACHE_DIR, ".topology_cache.json")
@@ -49,7 +49,7 @@ def _get_firestore_db():
     return None
 
 
-def _load_disk_cache() -> Dict[str, Any]:
+def _load_disk_cache() -> dict[str, Any]:
     if os.path.exists(CACHE_FILE):
         try:
             with open(CACHE_FILE, "r", encoding="utf-8") as f:
@@ -59,7 +59,7 @@ def _load_disk_cache() -> Dict[str, Any]:
     return {}
 
 
-def _save_disk_cache(data: Dict[str, Any]) -> None:
+def _save_disk_cache(data: dict[str, Any]) -> None:
     try:
         existing = _load_disk_cache()
         existing.update(data)
@@ -73,14 +73,14 @@ def save_topology(
     project_id: str,
     user_id: str,
     repository_id: str,
-    topology_data: Dict[str, Any],
+    topology_data: dict[str, Any],
     commit_sha: str = ""
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Persists topology analysis results with projectId, analysisId, and timestamps.
     """
     analysis_id = f"topo_{int(time.time() * 1000)}"
-    timestamp = datetime.now(timezone.utc).isoformat()
+    timestamp = datetime.now(UTC).isoformat()
 
     doc = {
         "projectId": project_id,
@@ -134,7 +134,7 @@ def save_topology(
     return doc
 
 
-def get_topology(project_id: str, user_id: str = "") -> Optional[Dict[str, Any]]:
+def get_topology(project_id: str, user_id: str = "") -> dict[str, Any] | None:
     """
     Retrieves topology analysis by projectId and optional userId.
     """

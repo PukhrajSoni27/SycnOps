@@ -6,9 +6,12 @@ import json
 import os
 import re
 import secrets
+
+# Ensure services module is findable
+import sys
 import time
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 from urllib.parse import quote
 
 import httpx
@@ -18,17 +21,15 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr
 
-# Ensure services module is findable
-import sys
 _BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 if _BACKEND_DIR not in sys.path:
     sys.path.insert(0, _BACKEND_DIR)
 
 from services.topology_service import (
-    run_topology_analysis,
-    get_topology_tree_data,
     get_topology_dependencies_data,
     get_topology_file_metadata,
+    get_topology_tree_data,
+    run_topology_analysis,
 )
 
 try:
@@ -96,7 +97,7 @@ def init_firebase():
 init_firebase()
 
 
-def find_user_email(email: str) -> Optional[dict]:
+def find_user_email(email: str) -> dict | None:
     if firebase_db is not None:
         try:
             docs = list(firebase_db.collection("users").where("email", "==", email).limit(1).stream())
@@ -109,7 +110,28 @@ def find_user_email(email: str) -> Optional[dict]:
     return next((u for u in users if u["email"] == email), None)
 
 
-def find_user_id(user_id: str) -> Optional[dict]:
+def find_user_firebase_uid(firebase_uid: str) -> dict | None:
+    if firebase_db is not None:
+        try:
+            docs = list(firebase_db.collection("users").where("firebaseUid", "==", firebase_uid).limit(1).stream())
+            if docs:
+                d = docs[0].to_dict()
+                d["id"] = docs[0].id
+                return d
+        except Exception:
+            pass
+    if users_col is not None:
+        try:
+            u = users_col.find_one({"firebaseUid": firebase_uid})
+            if u:
+                u["id"] = str(u["_id"])
+                return u
+        except Exception:
+            pass
+    return next((u for u in users if u.get("firebaseUid") == firebase_uid), None)
+
+
+def find_user_id(user_id: str) -> dict | None:
     if firebase_db is not None:
         try:
             doc = firebase_db.collection("users").document(user_id).get()
@@ -149,7 +171,7 @@ class RegisterBody(BaseModel):
     name: str
     email: EmailStr
     password: str
-    role: Optional[str] = "developer"
+    role: str | None = "developer"
 
 
 class LoginBody(BaseModel):
@@ -159,8 +181,9 @@ class LoginBody(BaseModel):
 
 class SocialBody(BaseModel):
     provider: str
-    email: EmailStr
-    name: Optional[str] = None
+    idToken: str | None = None
+    email: str | None = None
+    name: str | None = None
 
 
 class NameBody(BaseModel):
@@ -169,9 +192,9 @@ class NameBody(BaseModel):
 
 class ImportBody(BaseModel):
     name: str
-    visibility: Optional[str] = None
-    language: Optional[str] = None
-    githubToken: Optional[str] = None
+    visibility: str | None = None
+    language: str | None = None
+    githubToken: str | None = None
 
 
 def make_token(user_id: str) -> str:
@@ -195,14 +218,14 @@ def workspace(user_id: str) -> dict:
     return workspaces[key]
 
 
-def find_repo(repos: list, id_param: str) -> Optional[dict]:
+def find_repo(repos: list, id_param: str) -> dict | None:
     for r in repos:
         if str(r.get("id")) == str(id_param) or r.get("name") == id_param or r.get("fullName") == id_param:
             return r
     return None
 
 
-def auth_user(authorization: Optional[str] = Header(None)) -> dict:
+def auth_user(authorization: str | None = Header(None)) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail={"success": False, "message": "Please log in."})
     try:
@@ -215,14 +238,14 @@ def auth_user(authorization: Optional[str] = Header(None)) -> dict:
     return user
 
 
-def parse_github_repo(raw: str) -> Optional[dict]:
+def parse_github_repo(raw: str) -> dict | None:
     if not raw or not raw.strip():
         return None
     cleaned = raw.strip().rstrip("/")
     url = re.match(
         r"(?:https?://)?(?:www\.)?github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?$",
         cleaned,
-        re.I,
+        re.IGNORECASE,
     )
     if url:
         return {"owner": url.group(1), "repo": url.group(2)}
@@ -232,12 +255,12 @@ def parse_github_repo(raw: str) -> Optional[dict]:
     return None
 
 
-def time_ago(iso: Optional[str]) -> str:
+def time_ago(iso: str | None) -> str:
     if not iso:
         return ""
     try:
         dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-        mins = max(0, int((datetime.now(timezone.utc) - dt).total_seconds() // 60))
+        mins = max(0, int((datetime.now(UTC) - dt).total_seconds() // 60))
     except Exception:
         return iso
     if mins < 60:
@@ -257,7 +280,7 @@ def label_priority(labels: list) -> str:
     return "low"
 
 
-def gh_headers(custom_token: Optional[str] = None) -> dict:
+def gh_headers(custom_token: str | None = None) -> dict:
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "SycnOps-AI/2.0"}
     token = custom_token or GITHUB_TOKEN
     if token:
@@ -265,7 +288,7 @@ def gh_headers(custom_token: Optional[str] = None) -> dict:
     return headers
 
 
-async def gh_fetch(path: str, custom_token: Optional[str] = None) -> Any:
+async def gh_fetch(path: str, custom_token: str | None = None) -> Any:
     url = f"https://api.github.com{path}"
     async with httpx.AsyncClient(timeout=GH_TIMEOUT) as client:
         res = await client.get(url, headers=gh_headers(custom_token))
@@ -288,7 +311,7 @@ async def gh_fetch(path: str, custom_token: Optional[str] = None) -> Any:
     return res.json()
 
 
-def map_repo(data: dict, extra: Optional[dict] = None) -> dict:
+def map_repo(data: dict, extra: dict | None = None) -> dict:
     extra = extra or {}
     is_private = (
         extra.get("visibility") == "private"
@@ -314,7 +337,7 @@ def map_repo(data: dict, extra: Optional[dict] = None) -> dict:
         "watchers": data.get("watchers_count") or 0,
         "size": data.get("size") or 0,
         "updatedAt": time_ago(data.get("updated_at")),
-        "importedAt": extra.get("importedAt") or datetime.now(timezone.utc).isoformat(),
+        "importedAt": extra.get("importedAt") or datetime.now(UTC).isoformat(),
         "source": "github",
     }
 
@@ -369,7 +392,7 @@ def map_commit(commit: dict, repo_full: str) -> dict:
     }
 
 
-async def fetch_repo_bundle(owner: str, repo: str, custom_token: Optional[str] = None) -> dict:
+async def fetch_repo_bundle(owner: str, repo: str, custom_token: str | None = None) -> dict:
     o, r = quote(owner), quote(repo)
     meta = await gh_fetch(f"/repos/{o}/{r}", custom_token)
     issues_raw, pulls_raw, commits_raw = [], [], []
@@ -417,7 +440,7 @@ def health():
         "version": "2.1.0",
         "database": "connected" if users_col is not None else "memory",
         "runtime": "fastapi",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 
@@ -434,7 +457,7 @@ def register(body: RegisterBody):
         "password": pwd.hash(body.password),
         "role": body.role or "developer",
         "authProvider": "local",
-        "createdAt": datetime.now(timezone.utc).isoformat(),
+        "createdAt": datetime.now(UTC).isoformat(),
     })
     return {"success": True, "token": make_token(user["id"]), "user": format_user(user)}
 
@@ -456,24 +479,93 @@ def login(body: LoginBody):
 def social_login(body: SocialBody):
     if body.provider not in ("google", "github"):
         json_error(400, "Provider must be google or github.")
-    email = body.email.lower().strip()
-    display = (body.name or "").strip() or email.split("@")[0]
+
+    if not body.idToken or not isinstance(body.idToken, str):
+        json_error(400, "Valid Firebase ID token is required for social authentication.")
+
+    # Cryptographically verify Firebase ID token using Google public certificates
+    expected_project_id = os.getenv("FIREBASE_PROJECT_ID", "sycnops-cd9af")
+    try:
+        from google.oauth2 import id_token as google_id_token
+        from google.auth.transport import requests as google_requests
+        decoded = google_id_token.verify_firebase_token(
+            body.idToken,
+            google_requests.Request(),
+            audience=expected_project_id
+        )
+    except Exception as verify_err:
+        json_error(401, f"Firebase token verification failed: {verify_err!s}")
+
+    # Validate audience, issuer and subject
+    if decoded.get("aud") != expected_project_id or decoded.get("iss") != f"https://securetoken.google.com/{expected_project_id}":
+        json_error(401, "Invalid token audience or issuer.")
+
+    firebase_uid = decoded.get("uid") or decoded.get("sub")
+    if not firebase_uid:
+        json_error(401, "Invalid token subject (missing UID).")
+
+    # Validate provider identity claim
+    firebase_claim = decoded.get("firebase", {})
+    token_provider = firebase_claim.get("sign_in_provider", "")
+    expected_domain = "github.com" if body.provider == "github" else "google.com"
+    identities = firebase_claim.get("identities", {})
+    has_identity = expected_domain in identities
+
+    if token_provider and token_provider != expected_domain and not has_identity:
+        json_error(401, f"Token provider '{token_provider}' does not match requested provider '{body.provider}'.")
+
+    # Extract verified identity
+    is_email_verified = bool(decoded.get("email_verified"))
+    raw_email = (decoded.get("email") or "").lower().strip()
+    verified_email = raw_email if (is_email_verified and raw_email) else ""
+    has_verified_email = bool(verified_email)
+
+    # For display/fallback when GitHub email is kept private:
+    # Stable identity is firebaseUid. Synthetic emails are NEVER marked verified or used to link.
+    user_email = verified_email or f"{firebase_uid}@github.noreply.syncops.dev"
+    is_synthetic_email = not has_verified_email
+    display = (decoded.get("name") or "").strip() or (verified_email.split("@")[0] if verified_email else ("GitHub User" if body.provider == "github" else "Google User"))
     provider = "github" if body.provider == "github" else "google"
-    user = find_user_email(email)
+
+    # Step A: Primary lookup by immutable firebaseUid (always safe)
+    user = find_user_firebase_uid(firebase_uid)
+    # Step B: ONLY if token carries a genuine verified email, check for existing account
+    if not user and has_verified_email:
+        user = find_user_email(verified_email)
+
     if not user:
         user = save_user({
             "name": display,
-            "email": email,
+            "email": user_email,
+            "firebaseUid": firebase_uid,
             "role": "developer",
             "authProvider": provider,
-            "createdAt": datetime.now(timezone.utc).isoformat(),
+            "emailVerified": has_verified_email,
+            "isSyntheticEmail": is_synthetic_email,
+            "createdAt": datetime.now(UTC).isoformat(),
         })
     elif users_col is not None:
         from bson import ObjectId
-        users_col.update_one({"_id": ObjectId(user["id"])}, {"$set": {"name": display, "authProvider": provider}})
+        updates = {"name": display, "authProvider": provider}
+        if firebase_uid:
+            updates["firebaseUid"] = firebase_uid
+        if has_verified_email:
+            updates["email"] = verified_email
+            updates["emailVerified"] = True
+            updates["isSyntheticEmail"] = False
+        users_col.update_one({"_id": ObjectId(user["id"])}, {"$set": updates})
         user["name"] = display
+        if has_verified_email:
+            user["email"] = verified_email
+            user["emailVerified"] = True
     elif display and user["name"] != display:
         user["name"] = display
+        if firebase_uid and not user.get("firebaseUid"):
+            user["firebaseUid"] = firebase_uid
+        if has_verified_email:
+            user["email"] = verified_email
+            user["emailVerified"] = True
+            user["isSyntheticEmail"] = False
     return {"success": True, "message": f"Signed in with {body.provider}.", "token": make_token(user["id"]), "user": format_user(user)}
 
 
@@ -515,7 +607,7 @@ async def import_repo(body: ImportBody, user: dict = Depends(auth_user)):
         bundle = await fetch_repo_bundle(parsed["owner"], parsed["repo"], getattr(body, "githubToken", None))
         is_private = bool(bundle["meta"].get("private")) or bundle["meta"].get("visibility") == "private" or is_req_private
         vis = "private" if is_private else "public"
-        repo = map_repo(bundle["meta"], {"importedAt": datetime.now(timezone.utc).isoformat(), "visibility": vis, "private": is_private})
+        repo = map_repo(bundle["meta"], {"importedAt": datetime.now(UTC).isoformat(), "visibility": vis, "private": is_private})
         repo["visibility"] = vis
         repo["githubToken"] = getattr(body, "githubToken", None)
         repo["issues"] = bundle["issues"]
@@ -542,7 +634,7 @@ async def import_repo(body: ImportBody, user: dict = Depends(auth_user)):
 
 
 @app.get("/api/repositories/github-info/{owner}/{repo}")
-async def github_info(owner: str, repo: str, token: Optional[str] = None, user: dict = Depends(auth_user)):
+async def github_info(owner: str, repo: str, token: str | None = None, user: dict = Depends(auth_user)):
     try:
         bundle = await fetch_repo_bundle(owner, repo, token)
         is_private = bool(bundle["meta"].get("private")) or bundle["meta"].get("visibility") == "private"
@@ -654,7 +746,7 @@ async def repo_analysis(repo_id: str, user: dict = Depends(auth_user)):
             return now
 
     def has_label(issue, pattern):
-        return any(re.search(pattern, (l.get("name") or ""), re.I) for l in (issue.get("labels") or []) if isinstance(l, dict))
+        return any(re.search(pattern, (l.get("name") or ""), re.IGNORECASE) for l in (issue.get("labels") or []) if isinstance(l, dict))
 
     open_issues = [i for i in issues if i.get("state") == "open" and not i.get("pull_request")]
     closed_issues = [i for i in issues if i.get("state") == "closed" and not i.get("pull_request")]
@@ -818,7 +910,7 @@ def dashboard(user: dict = Depends(auth_user)):
 
 
 @app.get("/api/pipelines")
-def get_pipelines(status: Optional[str] = None, repo: Optional[str] = None, user: dict = Depends(auth_user)):
+def get_pipelines(status: str | None = None, repo: str | None = None, user: dict = Depends(auth_user)):
     ws = workspace(user["id"])
     if "pipelines" not in ws:
         repo_name = ws["repos"][0]["name"] if ws["repos"] else "campus-lost-found"
@@ -835,7 +927,7 @@ def get_pipelines(status: Optional[str] = None, repo: Optional[str] = None, user
                 "author": "pukhraj-soni",
                 "status": "success",
                 "trigger": "manual",
-                "startedAt": datetime.now(timezone.utc).isoformat(),
+                "startedAt": datetime.now(UTC).isoformat(),
                 "duration": "1m 18s",
                 "environment": "production",
                 "stages": [
@@ -871,7 +963,7 @@ def trigger_pipeline(body: dict, user: dict = Depends(auth_user)):
         "author": user.get("name", "pukhraj-soni"),
         "status": "running",
         "trigger": "manual",
-        "startedAt": datetime.now(timezone.utc).isoformat(),
+        "startedAt": datetime.now(UTC).isoformat(),
         "duration": "running...",
         "environment": body.get("environment") or "production",
         "stages": [
@@ -913,7 +1005,7 @@ def is_vendor_path(p: str) -> bool:
     parts = p.replace("\\", "/").split("/")
     return any(part.lower() in VENDOR_DIRS for part in parts)
 
-def calculate_repo_pipeline(repo: Optional[dict], token: Optional[str] = None) -> dict:
+def calculate_repo_pipeline(repo: dict | None, token: str | None = None) -> dict:
     start_time = time.perf_counter()
     files_count = 144
     languages_detected = ["TypeScript", "Python", "JavaScript", "CSS"]
@@ -1326,7 +1418,7 @@ def calculate_repo_pipeline(repo: Optional[dict], token: Optional[str] = None) -
 
 
 @app.get("/api/pipeline/repo-analysis")
-def get_repo_analysis_pipeline(repoId: Optional[str] = None, user: dict = Depends(auth_user), x_github_token: Optional[str] = Header(None)):
+def get_repo_analysis_pipeline(repoId: str | None = None, user: dict = Depends(auth_user), x_github_token: str | None = Header(None)):
     ws = workspace(user["id"])
     repos = ws.get("repos", [])
     repo = None
@@ -1341,7 +1433,7 @@ def get_repo_analysis_pipeline(repoId: Optional[str] = None, user: dict = Depend
 
 
 @app.post("/api/pipeline/repo-analysis/run")
-def run_repo_analysis_pipeline(body: dict = None, user: dict = Depends(auth_user), x_github_token: Optional[str] = Header(None)):
+def run_repo_analysis_pipeline(body: dict = None, user: dict = Depends(auth_user), x_github_token: str | None = Header(None)):
     ws = workspace(user["id"])
     repos = ws.get("repos", [])
     repo_id = (body or {}).get("repoId")
@@ -1358,7 +1450,7 @@ def run_repo_analysis_pipeline(body: dict = None, user: dict = Depends(auth_user
 
 # ── File Topology Endpoints ───────────────────────────────────────────────────
 
-def resolve_project_repo(ws: dict, project_id: str) -> Optional[dict]:
+def resolve_project_repo(ws: dict, project_id: str) -> dict | None:
     repos = ws.get("repos", [])
     if not repos:
         return None
@@ -1371,7 +1463,7 @@ def resolve_project_repo(ws: dict, project_id: str) -> Optional[dict]:
 async def get_project_topology_endpoint(
     projectId: str,
     user: dict = Depends(auth_user),
-    x_github_token: Optional[str] = Header(None)
+    x_github_token: str | None = Header(None)
 ):
     ws = workspace(user["id"])
     repo = resolve_project_repo(ws, projectId)
@@ -1394,14 +1486,14 @@ async def get_project_topology_endpoint(
         )
         return {"success": True, "data": data}
     except Exception as err:
-        raise HTTPException(status_code=500, detail={"success": False, "message": f"File topology analysis failed: {str(err)}"})
+        raise HTTPException(status_code=500, detail={"success": False, "message": f"File topology analysis failed: {err!s}"})
 
 
 @app.get("/api/projects/{projectId}/topology/tree")
 async def get_project_topology_tree_endpoint(
     projectId: str,
     user: dict = Depends(auth_user),
-    x_github_token: Optional[str] = Header(None)
+    x_github_token: str | None = Header(None)
 ):
     ws = workspace(user["id"])
     repo = resolve_project_repo(ws, projectId)
@@ -1424,7 +1516,7 @@ async def get_project_topology_tree_endpoint(
 async def get_project_topology_dependencies_endpoint(
     projectId: str,
     user: dict = Depends(auth_user),
-    x_github_token: Optional[str] = Header(None)
+    x_github_token: str | None = Header(None)
 ):
     ws = workspace(user["id"])
     repo = resolve_project_repo(ws, projectId)
@@ -1463,7 +1555,7 @@ async def get_project_topology_file_endpoint(
 async def rescan_project_topology_endpoint(
     projectId: str,
     user: dict = Depends(auth_user),
-    x_github_token: Optional[str] = Header(None)
+    x_github_token: str | None = Header(None)
 ):
     ws = workspace(user["id"])
     repo = resolve_project_repo(ws, projectId)
@@ -1479,7 +1571,7 @@ async def rescan_project_topology_endpoint(
         )
         return {"success": True, "message": "Topology rescan completed successfully.", "data": data}
     except Exception as err:
-        raise HTTPException(status_code=500, detail={"success": False, "message": f"Rescan failed: {str(err)}"})
+        raise HTTPException(status_code=500, detail={"success": False, "message": f"Rescan failed: {err!s}"})
 
 
 if __name__ == "__main__":

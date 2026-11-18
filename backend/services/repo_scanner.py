@@ -7,12 +7,12 @@ Filters ignored directories and extracts file metadata, line counts, and source 
 """
 
 import os
-import re
-import httpx
-from typing import Dict, List, Set, Any, Optional
+from typing import Any
 
+import httpx
+
+from .file_classifier import classify_file
 from .language_detector import detect_language
-from .file_classifier import classify_file, is_sensitive_file
 
 IGNORED_DIRS = {
     "node_modules",
@@ -74,12 +74,12 @@ def read_content_sample(file_path: str, max_lines: int = 200, max_bytes: int = 6
         return ""
 
 
-async def scan_local_repository(root_dir: str) -> List[Dict[str, Any]]:
+async def scan_local_repository(root_dir: str) -> list[dict[str, Any]]:
     """
     Recursively scans a local filesystem directory.
     Returns a list of file metadata dictionaries.
     """
-    files: List[Dict[str, Any]] = []
+    files: list[dict[str, Any]] = []
     root_norm = os.path.abspath(root_dir)
 
     for dirpath, dirnames, filenames in os.walk(root_norm):
@@ -141,8 +141,8 @@ async def scan_github_repository(
     owner: str,
     repo: str,
     default_branch: str = "main",
-    token: Optional[str] = None
-) -> List[Dict[str, Any]]:
+    token: str | None = None
+) -> list[dict[str, Any]]:
     """
     Recursively scans a remote GitHub repository using the Git Trees API.
     Fetches actual file paths, sizes, and downloads manifest/entry-point samples.
@@ -205,7 +205,7 @@ async def scan_github_repository(
         data = res.json()
         tree_items = data.get("tree", [])
 
-        files: List[Dict[str, Any]] = []
+        files: list[dict[str, Any]] = []
 
         # Collect blobs (files)
         blobs = [item for item in tree_items if item.get("type") == "blob"]

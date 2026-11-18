@@ -12,6 +12,10 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "concurrently": "^10.0.4"
+    "@eslint/js": "^10.0.1",
+    "concurrently": "^10.0.4",
+    "eslint": "^10.15.0",
+    "globals": "^17.14.0",
+    "typescript-eslint": "^8.73.0"
   }
 }

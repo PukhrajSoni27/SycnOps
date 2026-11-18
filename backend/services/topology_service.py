@@ -7,23 +7,23 @@ and database persistence with caching.
 """
 
 import os
-from typing import Dict, List, Any, Optional
+from typing import Any
 
-from .repo_scanner import scan_local_repository, scan_github_repository
+from .repo_scanner import scan_github_repository, scan_local_repository
 from .topology_graph_generator import generate_topology
-from .topology_storage import save_topology, get_topology
+from .topology_storage import get_topology, save_topology
 
 # Root directory of the repository workspace
 WORKSPACE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 
 
 async def run_topology_analysis(
-    repo_meta: Optional[Dict[str, Any]],
+    repo_meta: dict[str, Any] | None,
     user_id: str,
     project_id: str,
-    token: Optional[str] = None,
+    token: str | None = None,
     force_rescan: bool = False
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Performs full topology analysis on a repository (GitHub or local workspace)
     and saves the results into MongoDB / Firestore / cache.
@@ -36,7 +36,7 @@ async def run_topology_analysis(
 
     repo_name = "SycnOps Workspace"
     commit_sha = ""
-    files: List[Dict[str, Any]] = []
+    files: list[dict[str, Any]] = []
 
     # Determine if this is a GitHub repository
     if repo_meta and repo_meta.get("source") == "github" and repo_meta.get("owner") and repo_meta.get("name"):
@@ -69,7 +69,7 @@ async def run_topology_analysis(
     return saved
 
 
-def get_topology_tree_data(project_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+def get_topology_tree_data(project_id: str, user_id: str) -> dict[str, Any] | None:
     """Retrieves only the hierarchical folder tree."""
     doc = get_topology(project_id, user_id)
     if not doc:
@@ -83,7 +83,7 @@ def get_topology_tree_data(project_id: str, user_id: str) -> Optional[Dict[str, 
     }
 
 
-def get_topology_dependencies_data(project_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+def get_topology_dependencies_data(project_id: str, user_id: str) -> dict[str, Any] | None:
     """Retrieves dependencies, circular loops, and graph edges."""
     doc = get_topology(project_id, user_id)
     if not doc:
@@ -101,7 +101,7 @@ def get_topology_dependencies_data(project_id: str, user_id: str) -> Optional[Di
     }
 
 
-def get_topology_file_metadata(project_id: str, file_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+def get_topology_file_metadata(project_id: str, file_id: str, user_id: str) -> dict[str, Any] | None:
     """Retrieves detailed file metadata, imports, exports, and dependency degree."""
     doc = get_topology(project_id, user_id)
     if not doc:

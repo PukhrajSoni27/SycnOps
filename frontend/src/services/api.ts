@@ -275,11 +275,37 @@ export async function registerUser(userData: { name: string; email: string; pass
   return api('/auth/register', { method: 'POST', body: JSON.stringify(userData) })
 }
 
+import { signOutFirebase } from '../lib/firebase'
+
 export async function loginUser(credentials: { email: string; password: string }): Promise<AuthResponse> {
   return api('/auth/login', { method: 'POST', body: JSON.stringify(credentials) })
 }
 
-export async function socialLogin(data: { provider: 'google' | 'github'; email: string; name?: string }): Promise<AuthResponse> {
+export async function logoutUser(): Promise<void> {
+  try {
+    await signOutFirebase()
+  } catch (err) {
+    console.warn('Firebase signOut error during logout:', err)
+  }
+  localStorage.removeItem('sycnops_token')
+  localStorage.removeItem('token')
+  localStorage.removeItem('sycnops_user')
+  localStorage.removeItem('user')
+  sessionStorage.removeItem('sycnops_pending_auth_provider')
+  if (typeof sessionStorage !== 'undefined') {
+    Object.keys(sessionStorage).forEach((k) => {
+      if (k.startsWith('sycnops_auth_done_')) sessionStorage.removeItem(k)
+    })
+  }
+  window.dispatchEvent(new Event('sycnops_user_updated'))
+}
+
+export async function socialLogin(data: {
+  provider: 'google' | 'github'
+  idToken: string
+  email?: string
+  name?: string
+}): Promise<AuthResponse> {
   return api('/auth/social', { method: 'POST', body: JSON.stringify(data) })
 }
 

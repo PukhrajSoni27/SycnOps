@@ -19,7 +19,7 @@ import {
   buildAnalysis,
   calculateRepositoryPipeline
 } from './lib/github.js'
-import { initFirebase, getDB, isFirestoreConnected } from './config/firebase.js'
+import { initFirebase, getDB, isFirestoreConnected, verifyFirebaseIdToken } from './config/firebase.js'
 import {
   createPipelineExecutionRecord,
   executePipeline,
@@ -484,48 +484,155 @@ app.post('/api/auth/login', async (req, res) => {
 // ── Social Login (Google / GitHub) ───────────────────────
 app.post('/api/auth/social', async (req, res) => {
   try {
-    const { provider, email, name } = req.body || {}
-    if (!email || !provider) {
-      return res.status(400).json({ success: false, message: 'Provider and email are required.' })
+    const { provider, idToken } = req.body || {}
+    if (!provider || (provider !== 'google' && provider !== 'github')) {
+      return res.status(400).json({ success: false, message: 'Valid provider (google or github) is required.' })
     }
-    const normalized = String(email).toLowerCase().trim()
-    const displayName = (name && String(name).trim()) || normalized.split('@')[0]
-    const authProvider = provider === 'github' ? 'github' : 'google'
+    if (!idToken || typeof idToken !== 'string') {
+      return res.status(400).json({ success: false, message: 'Valid Firebase ID token is required for social authentication.' })
+    }
 
+    // 1. Cryptographically verify the ID token via Firebase Admin SDK
+    let decodedToken
+    try {
+      decodedToken = await verifyFirebaseIdToken(idToken)
+    } catch (verifyErr) {
+      console.warn('Firebase ID token verification failed:', verifyErr.message)
+      return res.status(401).json({
+        success: false,
+        message: 'Firebase token verification failed. The token may be expired or invalid.'
+      })
+    }
+
+    // 1b. Strict claim assertions: audience, issuer, subject
+    const expectedProjectId = process.env.FIREBASE_PROJECT_ID || 'sycnops-cd9af'
+    if (decodedToken.aud !== expectedProjectId || decodedToken.iss !== `https://securetoken.google.com/${expectedProjectId}`) {
+      return res.status(401).json({ success: false, message: 'Invalid token audience or issuer.' })
+    }
+    if (!decodedToken.uid || typeof decodedToken.uid !== 'string') {
+      return res.status(401).json({ success: false, message: 'Invalid token subject (missing UID).' })
+    }
+
+    // 2. Validate provider match against the actual token issuer identity
+    const tokenProvider = decodedToken.firebase?.sign_in_provider || ''
+    const expectedDomain = provider === 'github' ? 'github.com' : 'google.com'
+    const identities = decodedToken.firebase?.identities || {}
+    const hasExpectedIdentity = Boolean(identities[expectedDomain])
+
+    if (tokenProvider && tokenProvider !== expectedDomain && !hasExpectedIdentity) {
+      return res.status(401).json({
+        success: false,
+        message: `Token provider '${tokenProvider}' does not match requested provider '${provider}'.`
+      })
+    }
+
+    // 3. Extract verified identity from the decoded token — never trust client headers/body
+    const firebaseUid = decodedToken.uid
+    const isEmailVerified = Boolean(decodedToken.email_verified)
+    const rawEmail = decodedToken.email ? String(decodedToken.email).toLowerCase().trim() : ''
+    // Only genuine, cryptographically verified emails may be used for account linking
+    const verifiedEmail = (isEmailVerified && rawEmail) ? rawEmail : ''
+    const hasVerifiedEmail = Boolean(verifiedEmail)
+
+    // For display / account identification when GitHub email is kept private:
+    // Firebase UID is the immutable stable identity. Fallback synthetic address is NEVER marked verified.
+    const userEmail = verifiedEmail || `${firebaseUid}@github.noreply.syncops.dev`
+    const isSyntheticEmail = !hasVerifiedEmail
+    const displayName = (decodedToken.name && String(decodedToken.name).trim()) ||
+      (verifiedEmail ? verifiedEmail.split('@')[0] : (provider === 'github' ? 'GitHub Developer' : 'Google Developer'))
+    const avatar = decodedToken.picture || ''
+
+    // 4. Safe account lookup and linking:
+    // RULE: We NEVER link accounts using synthetic fallback emails or unverified email strings!
+    let user = null
     if (isFirestoreConnected()) {
-      let user = await findUserByEmail(normalized)
+      const db = getDB()
+      // Step A: Primary lookup by immutable firebaseUid (always safe)
+      if (firebaseUid) {
+        const snapUid = await db.collection('users').where('firebaseUid', '==', firebaseUid).limit(1).get()
+        if (!snapUid.empty) {
+          user = { id: snapUid.docs[0].id, ...snapUid.docs[0].data() }
+        }
+      }
+      // Step B: ONLY if the token carries a genuine, verified email, check for an existing account with that verified email
+      if (!user && hasVerifiedEmail) {
+        user = await findUserByEmail(verifiedEmail)
+      }
+
       if (!user) {
+        // Create new account
         user = await createUser({
           name: displayName,
-          email: normalized,
-          authProvider,
+          email: userEmail,
+          firebaseUid,
+          avatar,
+          authProvider: provider,
           role: 'developer',
+          emailVerified: hasVerifiedEmail,
+          isSyntheticEmail,
           lastLoginAt: new Date().toISOString()
         })
       } else {
-        await updateUser(user.id, {
+        // Link existing account safely:
+        // Only update email/verification if the incoming email is genuinely verified
+        const updates = {
           lastLoginAt: new Date().toISOString(),
-          authProvider: user.authProvider || authProvider
-        })
-        user = (await findUserById(user.id)) || user
+          authProvider: user.authProvider || provider,
+          ...(firebaseUid && !user.firebaseUid ? { firebaseUid } : {}),
+          ...(avatar && !user.avatar ? { avatar } : {}),
+          ...(hasVerifiedEmail ? { email: verifiedEmail, emailVerified: true, isSyntheticEmail: false } : {})
+        }
+        await updateUser(user.id, updates)
+        user = (await findUserById(user.id)) || { ...user, ...updates }
       }
-      return res.json({ success: true, message: `Signed in with ${provider}.`, token: makeToken(user.id), user: formatUser(user) })
+      return res.json({
+        success: true,
+        message: `Successfully authenticated with ${provider}.`,
+        token: makeToken(user.id),
+        user: formatUser(user)
+      })
     }
 
-    // Memory fallback
-    let user = memoryUsers.find((u) => u.email === normalized)
+    // Memory fallback (when Firestore credentials are not loaded)
+    // Primary lookup by firebaseUid; fallback lookup by verified email ONLY
+    user = memoryUsers.find((u) =>
+      (u.firebaseUid && u.firebaseUid === firebaseUid) ||
+      (hasVerifiedEmail && u.email?.toLowerCase() === verifiedEmail)
+    )
+
     if (!user) {
       user = {
         id: 'usr_social_' + Date.now(),
         name: displayName,
-        email: normalized,
-        password: await bcrypt.hash(`social_${provider}_${Date.now()}`, 10),
+        email: userEmail,
+        firebaseUid,
+        avatar,
+        authProvider: provider,
         role: 'developer',
-        createdAt: new Date().toISOString()
+        emailVerified: hasVerifiedEmail,
+        isSyntheticEmail,
+        createdAt: new Date().toISOString(),
+        lastLoginAt: new Date().toISOString()
       }
       memoryUsers.push(user)
+    } else {
+      user.lastLoginAt = new Date().toISOString()
+      if (firebaseUid && !user.firebaseUid) user.firebaseUid = firebaseUid
+      if (avatar && !user.avatar) user.avatar = avatar
+      if (!user.authProvider) user.authProvider = provider
+      if (hasVerifiedEmail) {
+        user.email = verifiedEmail
+        user.emailVerified = true
+        user.isSyntheticEmail = false
+      }
     }
-    return res.json({ success: true, message: `Signed in with ${provider}.`, token: makeToken(user.id), user: formatUser(user) })
+
+    return res.json({
+      success: true,
+      message: `Successfully authenticated with ${provider}.`,
+      token: makeToken(user.id),
+      user: formatUser(user)
+    })
   } catch (err) {
     console.error('Social login error:', err)
     return res.status(500).json({ success: false, message: err?.message || 'Social login failed.' })

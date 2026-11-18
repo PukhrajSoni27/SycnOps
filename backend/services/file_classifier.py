@@ -6,7 +6,7 @@ dependency manifests, and flags sensitive/configuration files.
 """
 
 import re
-from typing import Dict, Any
+from typing import Any
 
 ENTRY_POINTS = {
     # Frontend entry points
@@ -36,7 +36,7 @@ def is_sensitive_file(filename: str) -> bool:
     return any(re.match(pattern, lower) for pattern in SENSITIVE_PATTERNS)
 
 
-def classify_file(file_path: str) -> Dict[str, Any]:
+def classify_file(file_path: str) -> dict[str, Any]:
     """
     Classifies a file path into an architectural layer and extracts role metadata.
     """

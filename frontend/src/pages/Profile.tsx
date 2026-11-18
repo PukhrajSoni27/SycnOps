@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { User, fetchUserProfile, updateUserProfile } from '../services/api'
+import { User, fetchUserProfile, updateUserProfile, logoutUser } from '../services/api'
 import { LogOut, Edit2 } from 'lucide-react'
 
 export default function Profile() {
@@ -43,12 +43,8 @@ export default function Profile() {
     return () => window.removeEventListener('sycnops_user_updated', handleUpdate)
   }, [])
 
-  const handleLogout = () => {
-    localStorage.removeItem('sycnops_token')
-    localStorage.removeItem('token')
-    localStorage.removeItem('sycnops_user')
-    localStorage.removeItem('user')
-    window.dispatchEvent(new Event('sycnops_user_updated'))
+  const handleLogout = async () => {
+    await logoutUser()
     navigate('/login')
   }
 

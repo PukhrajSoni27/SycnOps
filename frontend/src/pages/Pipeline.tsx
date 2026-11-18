@@ -6,7 +6,7 @@ import {
   Search, ShieldCheck, Sparkles, Box, Ban, Layers, Activity,
   ArrowDown, FolderGit2, Code2, Cpu, FileSearch, ShieldAlert,
   BarChart3, ArrowRight, ExternalLink, Filter, Loader2, Table as TableIcon, LayoutGrid,
-  FileText, Shield, AlertTriangle
+  FileText, Shield, AlertTriangle, Minus
 } from 'lucide-react'
 import {
   usePipelinesQuery,
@@ -24,6 +24,7 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; color: string; 
   completed: { label: 'Completed', bg: 'rgba(16,185,129,0.12)', color: '#10B981', border: 'rgba(16,185,129,0.3)' },
   running: { label: 'Running', bg: 'rgba(56,189,248,0.12)', color: '#38BDF8', border: 'rgba(56,189,248,0.3)' },
   failed: { label: 'Failed', bg: 'rgba(239,68,68,0.12)', color: '#EF4444', border: 'rgba(239,68,68,0.3)' },
+  skipped: { label: 'Skipped', bg: 'rgba(234,179,8,0.12)', color: '#EAB308', border: 'rgba(234,179,8,0.3)' },
   queued: { label: 'Queued', bg: 'rgba(245,158,11,0.12)', color: '#F59E0B', border: 'rgba(245,158,11,0.3)' },
   pending: { label: 'Pending', bg: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', border: 'rgba(255,255,255,0.1)' },
 }
@@ -127,6 +128,26 @@ function StageIcon({ status }: { status: string }) {
         }}
       >
         <XCircle size={14} />
+      </div>
+    )
+  }
+  if (status === 'skipped') {
+    return (
+      <div
+        style={{
+          width: 22,
+          height: 22,
+          borderRadius: '50%',
+          backgroundColor: 'rgba(234,179,8,0.12)',
+          border: '1px solid #EAB308',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#EAB308',
+        }}
+        title="Stage skipped"
+      >
+        <Minus size={13} strokeWidth={2.5} />
       </div>
     )
   }

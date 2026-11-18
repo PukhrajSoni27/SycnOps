@@ -7,8 +7,12 @@ Generates comprehensive summary metrics, language breakdowns, and layout coordin
 """
 
 import hashlib
-from typing import Dict, List, Set, Any, Tuple
-from .dependency_extractor import extract_imports_and_exports, find_circular_dependencies
+from typing import Any
+
+from .dependency_extractor import (
+    extract_imports_and_exports,
+    find_circular_dependencies,
+)
 
 
 def sanitize_id(path_str: str) -> str:
@@ -18,12 +22,12 @@ def sanitize_id(path_str: str) -> str:
     return f"node_{clean}_{digest}"
 
 
-def build_hierarchical_tree(files: List[Dict[str, Any]], repo_name: str) -> Dict[str, Any]:
+def build_hierarchical_tree(files: list[dict[str, Any]], repo_name: str) -> dict[str, Any]:
     """
     Constructs a nested tree of folders and files from a flat file list.
     Calculates cumulative line counts and sizes for every directory level.
     """
-    root: Dict[str, Any] = {
+    root: dict[str, Any] = {
         "id": "root",
         "name": repo_name or "Repository",
         "path": "",
@@ -82,7 +86,7 @@ def build_hierarchical_tree(files: List[Dict[str, Any]], repo_name: str) -> Dict
             curr = curr["children"][part]
 
     # Recursive post-processing to compute cumulative stats and convert children dicts to sorted lists
-    def compute_stats(node: Dict[str, Any]) -> Tuple[int, int, int, int]:
+    def compute_stats(node: dict[str, Any]) -> tuple[int, int, int, int]:
         if not node.get("isDirectory"):
             return (1, 0, node.get("linesCount", 0), node.get("sizeBytes", 0))
 
@@ -116,17 +120,17 @@ def build_hierarchical_tree(files: List[Dict[str, Any]], repo_name: str) -> Dict
     return root
 
 
-def generate_topology(files: List[Dict[str, Any]], repo_name: str) -> Dict[str, Any]:
+def generate_topology(files: list[dict[str, Any]], repo_name: str) -> dict[str, Any]:
     """
     Main generator: extracts dependencies, resolves cycles, builds hierarchical tree,
     and generates React Flow graph nodes and edges.
     """
     known_files = {f["path"] for f in files}
-    files_by_path: Dict[str, Dict[str, Any]] = {f["path"]: f for f in files}
+    files_by_path: dict[str, dict[str, Any]] = {f["path"]: f for f in files}
 
     # 1. Extract imports and exports
-    adj_list: Dict[str, List[str]] = {}
-    in_degrees: Dict[str, int] = {f["path"]: 0 for f in files}
+    adj_list: dict[str, list[str]] = {}
+    in_degrees: dict[str, int] = {f["path"]: 0 for f in files}
 
     for f in files:
         path = f["path"]
@@ -149,7 +153,7 @@ def generate_topology(files: List[Dict[str, Any]], repo_name: str) -> Dict[str, 
 
     # 2. Cycle detection
     circular_cycles = find_circular_dependencies(adj_list)
-    circular_file_set: Set[str] = set()
+    circular_file_set: set[str] = set()
     for cyc in circular_cycles:
         circular_file_set.update(cyc)
 
@@ -161,8 +165,8 @@ def generate_topology(files: List[Dict[str, Any]], repo_name: str) -> Dict[str, 
     total_lines = sum(f.get("lines", 0) for f in files)
     total_size = sum(f.get("size", 0) for f in files)
 
-    languages_stats: Dict[str, Dict[str, Any]] = {}
-    categories_stats: Dict[str, int] = {}
+    languages_stats: dict[str, dict[str, Any]] = {}
+    categories_stats: dict[str, int] = {}
 
     for f in files:
         lang = f.get("language", "Other")
@@ -198,11 +202,11 @@ def generate_topology(files: List[Dict[str, Any]], repo_name: str) -> Dict[str, 
         "documentation": 6,
     }
 
-    category_counters: Dict[str, int] = {k: 0 for k in CATEGORY_COLUMNS}
-    nodes: List[Dict[str, Any]] = []
+    category_counters: dict[str, int] = {k: 0 for k in CATEGORY_COLUMNS}
+    nodes: list[dict[str, Any]] = []
 
     # Map for quick path -> node ID lookup
-    path_to_node_id: Dict[str, str] = {}
+    path_to_node_id: dict[str, str] = {}
 
     for f in files:
         node_id = sanitize_id(f["path"])
@@ -244,8 +248,8 @@ def generate_topology(files: List[Dict[str, Any]], repo_name: str) -> Dict[str, 
         })
 
     # Generate Edges
-    edges: List[Dict[str, Any]] = []
-    seen_edges: Set[str] = set()
+    edges: list[dict[str, Any]] = []
+    seen_edges: set[str] = set()
 
     for f in files:
         source_id = path_to_node_id.get(f["path"])

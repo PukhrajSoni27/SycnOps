@@ -1,12 +1,18 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
-  signInWithPopup,
   signInWithRedirect,
+  signInWithPopup,
   getRedirectResult,
-  GoogleAuthProvider,
-  GithubAuthProvider
+  onAuthStateChanged,
+  type User as FirebaseUser
 } from 'firebase/auth'
-import { auth } from '../lib/firebase'
+import {
+  auth,
+  createGoogleProvider,
+  createGitHubProvider,
+  isFirebaseConfigured,
+  getFirebaseConfigStatus
+} from '../lib/firebase'
 import { socialLogin } from '../services/api'
 
 type Props = {
@@ -36,128 +42,71 @@ const btnStyle: React.CSSProperties = {
   WebkitBackdropFilter: 'blur(10px)',
 }
 
-// ── Google Sign-In ──────────────────────────────────────────────────────────
-async function firebaseGoogleSignIn() {
-  if (!auth) throw new Error('Firebase is not configured. Check your VITE_FIREBASE_* env variables.')
-  const provider = new GoogleAuthProvider()
-  provider.addScope('email')
-  provider.addScope('profile')
-  const result = await signInWithPopup(auth, provider)
-  const user = result.user
-  return {
-    email: user.email ?? '',
-    name: user.displayName ?? user.email?.split('@')[0] ?? 'User',
-  }
-}
+/**
+ * Maps Firebase authentication error codes to helpful, user-friendly messages.
+ */
+function formatAuthError(err: any): string {
+  if (!err) return 'Authentication failed.'
+  const code = err.code || ''
+  const msg = err.message || ''
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : 'this domain'
 
-// ── GitHub Sign-In ──────────────────────────────────────────────────────────
-async function firebaseGitHubSignIn() {
-  if (!auth) throw new Error('Firebase is not configured. Check your VITE_FIREBASE_* env variables.')
-  const provider = new GithubAuthProvider()
-  provider.addScope('user:email')
-  const result = await signInWithPopup(auth, provider)
-  const user = result.user
-  // GitHub may return email as null if the user keeps it private — fall back to displayName
-  const email = user.email ?? `${user.displayName?.toLowerCase().replace(/\s+/g, '') ?? 'user'}@github.noreply`
-  return {
-    email,
-    name: user.displayName ?? email.split('@')[0],
+  if (msg.includes('missing initial state') || code === 'auth/missing-initial-state') {
+    return 'Browser storage partitioning blocked the OAuth redirect state. Switch to "Popup" mode above to sign in without redirect storage loss.'
+  }
+
+  switch (code) {
+    case 'auth/popup-blocked':
+      return 'Popup was blocked by your browser. Please allow popups for localhost or use Redirect mode.'
+    case 'auth/popup-closed-by-user':
+      return ''
+    case 'auth/unauthorized-domain':
+      return `Domain "${hostname}" is not authorized for OAuth in Firebase. Please add "${hostname}" to Firebase Console → Authentication → Settings → Authorized domains.`
+    case 'auth/operation-not-allowed':
+      return 'This sign-in provider is disabled in Firebase. Please enable it in Firebase Console → Authentication → Sign-in method.'
+    case 'auth/account-exists-with-different-credential':
+      return 'An account already exists with this email using a different sign-in method.'
+    case 'auth/network-request-failed':
+      return 'Network connection error during authentication. Please check your internet connection and try again.'
+    case 'auth/user-disabled':
+      return 'This user account has been disabled.'
+    case 'auth/redirect-cancelled-by-user':
+      return ''
+    default:
+      return msg || 'Social sign-in failed. Please try again.'
   }
 }
 
 export default function SocialAuthButtons({ loading, onStart, onDone, onError, onSuccess }: Props) {
-  const [blockedProvider, setBlockedProvider] = useState<'google' | 'github' | null>(null)
-  const [authMode, setAuthMode] = useState<'popup' | 'redirect'>(() => {
-    return (localStorage.getItem('sycnops_social_auth_mode') as 'popup' | 'redirect') || 'popup'
-  })
-  const [showBrowserGuide, setShowBrowserGuide] = useState(false)
+  const [activeProvider, setActiveProvider] = useState<'google' | 'github' | null>(null)
+  const isHandlingAuthRef = useRef(false)
 
-  const handleModeChange = (mode: 'popup' | 'redirect') => {
-    setAuthMode(mode)
-    localStorage.setItem('sycnops_social_auth_mode', mode)
-    if (mode === 'redirect') {
-      onError('')
-    }
-  }
+  // Detect localhost environment: on localhost/127.0.0.1, modern Chromium & WebKit enforce
+  // storage partitioning which isolates cross-domain redirect sessionStorage between localhost
+  // and *.firebaseapp.com, producing "auth/missing-initial-state".
+  // Default to popup on localhost for seamless zero-config developer experience, while offering redirect mode.
+  const isLocalhost = typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname === '[::1]'
+  )
 
-  // Listen for OAuth redirect return from Google / GitHub
-  useEffect(() => {
-    if (!auth) return
-    let isMounted = true
+  const [authMethod, setAuthMethod] = useState<'popup' | 'redirect'>(isLocalhost ? 'popup' : 'redirect')
 
-    getRedirectResult(auth)
-      .then(async (result) => {
-        if (!result?.user || !isMounted) return
-        onStart()
-        const user = result.user
-        const providerId = result.providerId || user.providerData?.[0]?.providerId || ''
-        const provider = providerId.includes('github') ? 'github' : 'google'
-        const email = user.email || `${user.displayName?.toLowerCase().replace(/\s+/g, '') ?? 'user'}@github.noreply`
-        const name = user.displayName || email.split('@')[0] || 'User'
-        const res = await socialLogin({ provider, email, name })
-        if (res.token) {
-          onSuccess(res.token, res.user)
-        } else {
-          onError(res.message || 'Social sign-in failed.')
-        }
-      })
-      .catch((err) => {
-        if (!isMounted) return
-        if (err?.code && err.code !== 'auth/popup-closed-by-user') {
-          onError(err.message || 'Redirect sign-in failed.')
-        }
-      })
-      .finally(() => {
-        if (isMounted) onDone()
-      })
+  // ── Helper to verify ID token on backend and establish SyncOps session ────────
+  const exchangeTokenAndLogin = async (user: FirebaseUser, provider: 'google' | 'github') => {
+    if (isHandlingAuthRef.current) return
+    isHandlingAuthRef.current = true
 
-    return () => {
-      isMounted = false
-    }
-  }, [])
-
-  const triggerRedirect = async (provider: 'google' | 'github') => {
-    if (!auth) {
-      onError('Firebase is not configured.')
-      return
-    }
-    onStart()
     try {
-      const p = provider === 'google' ? new GoogleAuthProvider() : new GithubAuthProvider()
-      if (provider === 'google') {
-        p.addScope('email')
-        p.addScope('profile')
-      } else {
-        p.addScope('user:email')
-      }
-      await signInWithRedirect(auth, p)
-    } catch (err: any) {
-      onError(err.message || 'Failed to redirect to sign-in provider.')
-      onDone()
-    }
-  }
+      onStart()
+      // 1. Obtain cryptographic Firebase ID Token
+      const idToken = await user.getIdToken()
 
-  const handleSocialAuth = async (provider: 'google' | 'github') => {
-    setBlockedProvider(null)
-    onError('')
-
-    // If user prefers redirect mode or previously had popups blocked, use redirect immediately
-    if (authMode === 'redirect') {
-      await triggerRedirect(provider)
-      return
-    }
-
-    onStart()
-    try {
-      const userInfo = provider === 'google'
-        ? await firebaseGoogleSignIn()
-        : await firebaseGitHubSignIn()
-
-      // Exchange Firebase identity for a SycnOps JWT from the backend
+      // 2. Exchange ID Token with backend for verified SyncOps session
       const res = await socialLogin({
         provider,
-        email: userInfo.email,
-        name: userInfo.name,
+        idToken,
       })
 
       if (res.token) {
@@ -166,41 +115,206 @@ export default function SocialAuthButtons({ loading, onStart, onDone, onError, o
         onError(res.message || `${provider} sign-in failed.`)
       }
     } catch (err: any) {
-      // Firebase popup-closed-by-user is not really an error
-      if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
-        onError('')
-      } else if (err?.code === 'auth/account-exists-with-different-credential') {
-        onError('An account already exists with this email using a different sign-in method.')
-      } else if (err?.code === 'auth/popup-blocked') {
-        setBlockedProvider(provider)
-        setAuthMode('redirect')
-        localStorage.setItem('sycnops_social_auth_mode', 'redirect')
-        onError('Popup was blocked by your browser. You can click "Continue via Full-Page Redirect" below (which requires no popups), or allow popups in your browser address bar.')
-      } else {
-        onError(err.message || `Failed to sign in with ${provider}.`)
-      }
+      console.error('Failed to exchange Firebase token:', err)
+      onError(formatAuthError(err))
     } finally {
       onDone()
+      setActiveProvider(null)
+      sessionStorage.removeItem('sycnops_pending_auth_provider')
+      isHandlingAuthRef.current = false
     }
   }
 
+  // ── Handle OAuth Return via getRedirectResult & onAuthStateChanged ──────────
+  useEffect(() => {
+    if (!auth) {
+      if (!isFirebaseConfigured()) {
+        const status = getFirebaseConfigStatus()
+        console.warn('Firebase configuration incomplete:', status.missingKeys)
+      }
+      return
+    }
+
+    let isMounted = true
+
+    // A. Check getRedirectResult when the page reloads from OAuth redirect
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (!result?.user || !isMounted) return
+
+        const user = result.user
+        const dedupeKey = `sycnops_auth_done_${user.uid}_${user.metadata.lastSignInTime}`
+        if (sessionStorage.getItem(dedupeKey)) return
+        sessionStorage.setItem(dedupeKey, 'true')
+
+        const providerId = result.providerId || user.providerData?.[0]?.providerId || ''
+        const provider: 'google' | 'github' = providerId.includes('github') ? 'github' : 'google'
+
+        await exchangeTokenAndLogin(user, provider)
+      })
+      .catch((err) => {
+        if (!isMounted) return
+        sessionStorage.removeItem('sycnops_pending_auth_provider')
+        const formatted = formatAuthError(err)
+        if (formatted) onError(formatted)
+        onDone()
+      })
+
+    // B. Handle persistent Firebase state fallback
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user || !isMounted) return
+
+      const pendingProvider = sessionStorage.getItem('sycnops_pending_auth_provider') as 'google' | 'github' | null
+      const existingToken = localStorage.getItem('sycnops_token')
+
+      if (pendingProvider && !existingToken && !isHandlingAuthRef.current) {
+        const dedupeKey = `sycnops_auth_done_${user.uid}_${user.metadata.lastSignInTime}`
+        if (sessionStorage.getItem(dedupeKey)) return
+        sessionStorage.setItem(dedupeKey, 'true')
+
+        await exchangeTokenAndLogin(user, pendingProvider)
+      }
+    })
+
+    return () => {
+      isMounted = false
+      unsubscribe()
+    }
+  }, [])
+
+  // ── Unified Sign-In: initiates signInWithPopup or signInWithRedirect ────────
+  const handleSignIn = async (provider: 'google' | 'github', forceMethod?: 'popup' | 'redirect') => {
+    if (!auth) {
+      onError('Firebase is not configured. Please verify your VITE_FIREBASE_* environment variables.')
+      return
+    }
+
+    onError('')
+    setActiveProvider(provider)
+    onStart()
+
+    const authProvider = provider === 'google'
+      ? createGoogleProvider()
+      : createGitHubProvider()
+
+    const method = forceMethod || authMethod
+
+    if (method === 'popup') {
+      try {
+        const result = await signInWithPopup(auth, authProvider)
+        if (result?.user) {
+          await exchangeTokenAndLogin(result.user, provider)
+        }
+      } catch (err: any) {
+        onDone()
+        setActiveProvider(null)
+        if (err.code === 'auth/popup-closed-by-user') {
+          return
+        }
+        if (err.code === 'auth/popup-blocked') {
+          onError('Popup was blocked by your browser. Please allow popups for localhost or click below to use Redirect mode.')
+          return
+        }
+        onError(formatAuthError(err))
+      }
+    } else {
+      try {
+        sessionStorage.setItem('sycnops_pending_auth_provider', provider)
+        await signInWithRedirect(auth, authProvider)
+      } catch (err: any) {
+        sessionStorage.removeItem('sycnops_pending_auth_provider')
+        onDone()
+        setActiveProvider(null)
+        onError(formatAuthError(err))
+      }
+    }
+  }
+
+  const isGoogleLoading = loading && activeProvider === 'google'
+  const isGithubLoading = loading && activeProvider === 'github'
+
   return (
     <>
+      {/* OAuth Mode Selector */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: '12px',
+        padding: '6px 10px',
+        backgroundColor: 'rgba(255, 255, 255, 0.03)',
+        borderRadius: '8px',
+        border: '1px solid rgba(255, 255, 255, 0.08)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim, #999)' }}>
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: authMethod === 'popup' ? '#10b981' : '#3b82f6' }} />
+          <span>OAuth Mode:</span>
+        </div>
+        <div style={{ display: 'flex', gap: '4px' }}>
+          <button
+            type="button"
+            onClick={() => setAuthMethod('popup')}
+            style={{
+              padding: '3px 8px',
+              fontSize: '11px',
+              fontFamily: 'var(--font-mono)',
+              borderRadius: '5px',
+              border: authMethod === 'popup' ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid transparent',
+              background: authMethod === 'popup' ? 'rgba(16, 185, 129, 0.15)' : 'transparent',
+              color: authMethod === 'popup' ? '#10b981' : 'var(--text-dim, #888)',
+              cursor: 'pointer',
+              fontWeight: authMethod === 'popup' ? 600 : 400,
+              transition: 'all 0.15s ease'
+            }}
+            title="Popup window mode. Recommended for localhost to avoid cross-domain storage partitioning errors."
+          >
+            Popup {isLocalhost ? '(Localhost)' : ''}
+          </button>
+          <button
+            type="button"
+            onClick={() => setAuthMethod('redirect')}
+            style={{
+              padding: '3px 8px',
+              fontSize: '11px',
+              fontFamily: 'var(--font-mono)',
+              borderRadius: '5px',
+              border: authMethod === 'redirect' ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid transparent',
+              background: authMethod === 'redirect' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+              color: authMethod === 'redirect' ? '#60a5fa' : 'var(--text-dim, #888)',
+              cursor: 'pointer',
+              fontWeight: authMethod === 'redirect' ? 600 : 400,
+              transition: 'all 0.15s ease'
+            }}
+            title="Full-page redirect mode. Works when hosted or with custom reverse proxy."
+          >
+            Redirect
+          </button>
+        </div>
+      </div>
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
         {/* Google */}
         <button
           type="button"
           id="btn-google-signin"
-          onClick={() => handleSocialAuth('google')}
+          onClick={() => handleSignIn('google')}
           disabled={loading}
-          style={btnStyle}
+          style={{
+            ...btnStyle,
+            opacity: loading && !isGoogleLoading ? 0.6 : 1,
+            cursor: loading ? 'not-allowed' : 'pointer'
+          }}
           onMouseEnter={e => {
-            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.12)'
-            e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.4)'
+            if (!loading) {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.12)'
+              e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.4)'
+            }
           }}
           onMouseLeave={e => {
-            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.06)'
-            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.16)'
+            if (!loading) {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.06)'
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.16)'
+            }
           }}
         >
           <svg width="18" height="18" viewBox="0 0 24 24">
@@ -209,122 +323,42 @@ export default function SocialAuthButtons({ loading, onStart, onDone, onError, o
             <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
             <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
           </svg>
-          {authMode === 'redirect' ? 'Continue with Google (Redirect)' : 'Continue with Google'}
+          {isGoogleLoading
+            ? (authMethod === 'redirect' ? 'Redirecting to Google...' : 'Signing in with Google...')
+            : 'Continue with Google'}
         </button>
 
         {/* GitHub */}
         <button
           type="button"
           id="btn-github-signin"
-          onClick={() => handleSocialAuth('github')}
+          onClick={() => handleSignIn('github')}
           disabled={loading}
-          style={btnStyle}
+          style={{
+            ...btnStyle,
+            opacity: loading && !isGithubLoading ? 0.6 : 1,
+            cursor: loading ? 'not-allowed' : 'pointer'
+          }}
           onMouseEnter={e => {
-            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.12)'
-            e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.4)'
+            if (!loading) {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.12)'
+              e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.4)'
+            }
           }}
           onMouseLeave={e => {
-            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.06)'
-            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.16)'
+            if (!loading) {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.06)'
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.16)'
+            }
           }}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
             <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
           </svg>
-          {authMode === 'redirect' ? 'Continue with GitHub (Redirect)' : 'Continue with GitHub'}
+          {isGithubLoading
+            ? (authMethod === 'redirect' ? 'Redirecting to GitHub...' : 'Signing in with GitHub...')
+            : 'Continue with GitHub'}
         </button>
-
-        {blockedProvider && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
-            <button
-              type="button"
-              id="btn-redirect-signin"
-              onClick={() => triggerRedirect(blockedProvider)}
-              disabled={loading}
-              style={{
-                ...btnStyle,
-                backgroundColor: 'rgba(16, 185, 129, 0.2)',
-                border: '1px solid #10B981',
-                color: '#34D399',
-                fontWeight: 600,
-                boxShadow: '0 0 16px rgba(16, 185, 129, 0.35)',
-                padding: '13px 16px',
-              }}
-            >
-              <span>👉 Continue with {blockedProvider === 'google' ? 'Google' : 'GitHub'} via Redirect (Bypasses Popup Blocker)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowBrowserGuide(!showBrowserGuide)}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: 'var(--text-muted, #9CA3AF)',
-                fontSize: '11px',
-                cursor: 'pointer',
-                textAlign: 'center',
-                textDecoration: 'underline',
-                padding: '4px'
-              }}
-            >
-              {showBrowserGuide ? 'Hide browser popup instructions ▲' : 'How do I permanently allow popups in my browser? ▼'}
-            </button>
-            {showBrowserGuide && (
-              <div style={{
-                background: 'rgba(0, 0, 0, 0.35)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                borderRadius: '8px',
-                padding: '12px',
-                fontSize: '11px',
-                lineHeight: '1.6',
-                color: '#D1D5DB'
-              }}>
-                <div style={{ fontWeight: 600, marginBottom: '6px', color: '#10B981' }}>How to allow popups on localhost:</div>
-                <div style={{ marginBottom: '4px' }}>• <strong>Chrome / Edge:</strong> Look at the right side of the address bar for the <strong>🚫 Pop-up blocked</strong> icon &rarr; click it &rarr; select <em>"Always allow pop-ups and redirects from http://localhost:3000"</em>.</div>
-                <div style={{ marginBottom: '4px' }}>• <strong>Brave:</strong> Click the <strong>Lion icon (Shields)</strong> next to the address bar &rarr; toggle Shields to <em>Down</em> for localhost, or allow popups.</div>
-                <div>• <strong>Firefox:</strong> Click <em>Options</em> on the top yellow warning bar &rarr; select <em>Allow pop-ups for localhost:3000</em>.</div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Method Switcher */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px', fontSize: '11px', color: '#9CA3AF', fontFamily: 'var(--font-mono)' }}>
-          <span>OAuth method:</span>
-          <div style={{ display: 'flex', gap: '4px' }}>
-            <button
-              type="button"
-              onClick={() => handleModeChange('popup')}
-              style={{
-                background: authMode === 'popup' ? 'rgba(255, 255, 255, 0.14)' : 'transparent',
-                border: `1px solid ${authMode === 'popup' ? 'rgba(255, 255, 255, 0.28)' : 'rgba(255, 255, 255, 0.08)'}`,
-                color: authMode === 'popup' ? '#FFFFFF' : '#9CA3AF',
-                borderRadius: '6px',
-                padding: '3px 8px',
-                cursor: 'pointer',
-                fontSize: '10px',
-              }}
-            >
-              Pop-up
-            </button>
-            <button
-              type="button"
-              onClick={() => handleModeChange('redirect')}
-              title="Navigates directly to provider page, avoiding popup blockers"
-              style={{
-                background: authMode === 'redirect' ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
-                border: `1px solid ${authMode === 'redirect' ? '#10B981' : 'rgba(255, 255, 255, 0.08)'}`,
-                color: authMode === 'redirect' ? '#34D399' : '#9CA3AF',
-                borderRadius: '6px',
-                padding: '3px 8px',
-                cursor: 'pointer',
-                fontSize: '10px',
-              }}
-            >
-              Redirect (No Pop-ups)
-            </button>
-          </div>
-        </div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', margin: '8px 0 24px', gap: '12px' }}>
