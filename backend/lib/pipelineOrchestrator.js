@@ -143,7 +143,7 @@ export function isTrustedRepository(pipeline, targetDir) {
     }
   }
 
-  const trustedRepos = ['sycnops', 'syncops', 'campus-lost-found', 'studio']
+  const trustedRepos = ['sycnops', 'syncops', 'studio']
   const repoName = (pipeline?.repo || pipeline?.repository || '').toLowerCase()
   if (repoName && !trustedRepos.includes(repoName) && pipeline?.isTrusted !== true) {
     return false
@@ -369,7 +369,7 @@ export function maskSensitiveData(str) {
 /**
  * Resolves npm CLI script path across Windows and Linux platforms without using shell: true.
  */
-function resolveNpmCommand() {
+export function resolveNpmCommand() {
   const nodeDir = path.dirname(process.execPath)
   const candidatePaths = [
     path.join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
@@ -504,15 +504,15 @@ export function validateWorkingDirectory(cwd) {
  * Creates a template pipeline execution object conforming to the specification.
  */
 export function createPipelineExecutionRecord({
-  repo = 'campus-lost-found',
+  repo = '',
   repoFullName,
   branch = 'main',
   workflow = 'production-ci',
   environment = 'production',
-  author = 'pukhraj-soni'
+  author = 'operator'
 } = {}) {
   const now = Date.now()
-  const cleanRepo = repo || 'campus-lost-found'
+  const cleanRepo = repo || 'repository'
   const cleanFullName = repoFullName || `studio/${cleanRepo}`
 
   return {

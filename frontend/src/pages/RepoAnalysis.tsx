@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { apiGet } from '@/services/api'
+import { useRepositoryContext } from '@/context/RepositoryContext'
 import {
   ArrowLeft, ExternalLink, Shield, AlertTriangle, Bug, Zap, BookOpen,
   GitBranch, GitPullRequest, Users, Clock, Star, GitFork, Package,
@@ -448,7 +449,9 @@ function downloadReport(repo: any, a: AnalysisData) {
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function RepoAnalysis() {
-  const { repoId } = useParams()
+  const { repoId: routeRepoId } = useParams()
+  const { selectedRepoId: contextRepoId, selectedRepo } = useRepositoryContext()
+  const repoId = routeRepoId || contextRepoId
 
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null)
   const [repoMeta, setRepoMeta] = useState<any>(null)
@@ -459,8 +462,14 @@ export default function RepoAnalysis() {
   const [downloading, setDownloading] = useState(false)
 
   useEffect(() => {
+    if (!repoId) {
+      setLoading(false)
+      return
+    }
     async function load() {
       try {
+        setLoading(true)
+        setError('')
         const [detail, anal] = await Promise.all([
           apiGet(`/repositories/${repoId}/details`),
           apiGet(`/repositories/${repoId}/analysis`)
@@ -478,6 +487,20 @@ export default function RepoAnalysis() {
     }
     load()
   }, [repoId])
+
+  if (!repoId) {
+    return (
+      <div style={{ maxWidth: 700, margin: '80px auto', textAlign: 'center', padding: '0 20px' }}>
+        <Workflow size={48} style={{ color: '#E8D2B5', margin: '0 auto 16px', display: 'block' }} />
+        <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '28px', color: 'var(--text)', marginBottom: 8 }}>
+          No Repository Selected
+        </h2>
+        <p style={{ fontFamily: 'var(--font-sans)', fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+          Please select or import a repository from the header dropdown above to view its deep architectural analysis.
+        </p>
+      </div>
+    )
+  }
 
   if (loading) return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '80px 0', textAlign: 'center' }}>
@@ -498,16 +521,30 @@ export default function RepoAnalysis() {
 
   if (!analysis) return null
 
-  const a = analysis
+  const a: AnalysisData = {
+    ...analysis,
+    langBreakdown: analysis.langBreakdown || [],
+    bugs: analysis.bugs || [],
+    securityIssuesList: analysis.securityIssuesList || [],
+    perfIssuesList: analysis.perfIssuesList || [],
+    stalePRsList: analysis.stalePRsList || [],
+    staleIssuesList: analysis.staleIssuesList || [],
+    featureRequests: analysis.featureRequests || [],
+    recentCommits: analysis.recentCommits || [],
+    findings: analysis.findings || [],
+    recommendations: analysis.recommendations || [],
+    insights: analysis.insights || [],
+    summary: analysis.summary || { criticalFindings: 0, highFindings: 0, mediumFindings: 0, lowFindings: 0 }
+  }
   const repo = repoMeta || {}
 
   const tabs = [
-    { id: 'findings' as const, label: 'Findings', count: a.findings?.length || 0 },
-    { id: 'bugs' as const, label: 'Bugs', count: a.openBugs },
-    { id: 'security' as const, label: 'Security', count: a.securityIssues },
-    { id: 'prs' as const, label: 'Stale PRs', count: a.stalePRs },
-    { id: 'commits' as const, label: 'Commits', count: a.recentCommits?.length || 0 },
-    { id: 'insights' as const, label: 'AI Insights', count: a.insights?.length || 0 },
+    { id: 'findings' as const, label: 'Findings', count: a.findings.length },
+    { id: 'bugs' as const, label: 'Bugs', count: a.openBugs || 0 },
+    { id: 'security' as const, label: 'Security', count: a.securityIssues || 0 },
+    { id: 'prs' as const, label: 'Stale PRs', count: a.stalePRs || 0 },
+    { id: 'commits' as const, label: 'Commits', count: a.recentCommits.length },
+    { id: 'insights' as const, label: 'AI Insights', count: a.insights.length },
   ]
 
   return (

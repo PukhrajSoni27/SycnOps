@@ -282,13 +282,7 @@ export async function runComprehensiveScan({
                      (extensionCounts['.pyc'] || 0) + (extensionCounts['.gitignore'] || 0)
 
   // Total files count: sum of clean tracked project source files
-  // If Estate-Luxe or similar structured repo: accurately captures the 144 files (130 tracked git source + configs/assets)
-  let totalFilesScanned = cleanBlobs.length
-  if (tsxCount === 72 && pyCount === 3 && ipynbCount === 5) {
-    totalFilesScanned = 144
-  } else if (totalFilesScanned < 10 && (repoMeta.size || 0) > 100) {
-    totalFilesScanned = Math.max(cleanBlobs.length, Math.round((repoMeta.size || 500) / 15))
-  }
+  const totalFilesScanned = cleanBlobs.length
 
   // Step 3: Core Language Detection
   // Determine actual core languages with significant representation
@@ -343,42 +337,6 @@ export async function runComprehensiveScan({
     }
   }
 
-  // Monorepo package harmonization (Estate-Luxe has 72 npm [53 prod + 19 dev] + 37 pip = 109 packages)
-  if (manifestPaths.some((p) => p.includes('Real-estate') || p.includes('frontend')) && (tsxCount > 20 || pyCount > 0)) {
-    if (frontendProdDeps.length < 53) {
-      frontendProdDeps = [
-        'react', 'react-dom', 'react-router-dom', '@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu',
-        '@radix-ui/react-slot', '@radix-ui/react-tooltip', '@radix-ui/react-tabs', '@radix-ui/react-select',
-        '@radix-ui/react-avatar', '@radix-ui/react-checkbox', '@radix-ui/react-switch', '@radix-ui/react-slider',
-        '@radix-ui/react-popover', '@radix-ui/react-accordion', '@radix-ui/react-alert-dialog', '@radix-ui/react-toast',
-        '@radix-ui/react-scroll-area', '@radix-ui/react-label', '@radix-ui/react-radio-group', '@radix-ui/react-progress',
-        '@tanstack/react-query', 'recharts', 'leaflet', 'react-leaflet', 'react-hook-form', 'zod', 'tailwindcss',
-        'lucide-react', 'clsx', 'tailwind-merge', 'class-variance-authority', 'framer-motion', 'date-fns',
-        'axios', 'zustand', 'cmdk', 'sonner', 'vaul', 'embla-carousel-react', 'input-otp', 'next-themes',
-        'react-day-picker', 'react-resizable-panels', 'canvas-confetti', 'countup.js', 'jspdf', 'html2canvas',
-        'leaflet-defaulticon-compatibility', 'proj4', 'numeral', 'chroma-js'
-      ]
-    }
-    if (frontendDevDeps.length < 19) {
-      frontendDevDeps = [
-        'vite', '@vitejs/plugin-react-swc', 'typescript', 'eslint', 'postcss', 'autoprefixer', 'rollup',
-        '@types/react', '@types/react-dom', '@types/node', '@types/leaflet', 'tailwindcss-animate',
-        'eslint-plugin-react-hooks', 'eslint-plugin-react-refresh', '@typescript-eslint/eslint-plugin',
-        '@typescript-eslint/parser', 'prettier', 'prettier-plugin-tailwindcss', 'terser'
-      ]
-    }
-    if (backendPipDeps.length < 37) {
-      backendPipDeps = [
-        'fastapi', 'uvicorn', 'starlette', 'pydantic', 'pydantic_core',
-        'passlib[argon2]', 'python-jose[cryptography]', 'python-multipart', 'reportlab', 'bcrypt',
-        'scikit-learn', 'xgboost', 'pandas', 'numpy', 'scipy', 'joblib', 'shap', 'sqlite3',
-        'matplotlib', 'seaborn', 'flask', 'streamlit', 'requests', 'httpx', 'python-dotenv',
-        'pytest', 'pytest-asyncio', 'black', 'flake8', 'isort', 'mypy', 'alembic', 'sqlalchemy',
-        'pillow', 'openpyxl', 'gunicorn', 'celery'
-      ]
-    }
-  }
-
   const allManifestPackages = new Set([
     ...frontendProdDeps,
     ...frontendDevDeps,
@@ -387,13 +345,7 @@ export async function runComprehensiveScan({
     ...rustDeps
   ])
 
-  let dependenciesFound = allManifestPackages.size
-  if (manifestPaths.some((p) => p.includes('Real-estate') || p.includes('frontend')) && (tsxCount > 20 || pyCount > 0)) {
-    dependenciesFound = 109
-  }
-  if (dependenciesFound === 0) {
-    dependenciesFound = Math.max(12, Math.round(totalFilesScanned * 0.22))
-  }
+  const dependenciesFound = allManifestPackages.size
 
   // Step 5: AST Symbol Extraction & Function Counting
   // Identify source files to scan
@@ -434,39 +386,30 @@ export async function runComprehensiveScan({
     } catch {}
   }
 
-  // Empirical function calculation for clean project source files
-  let functionsAnalyzed = directFunctionsCount
-  if (tsxCount === 72 && pyCount === 3 && ipynbCount === 5) {
-    // Exact spec count for Real-estate-project
-    functionsAnalyzed = 153
-    extractedSymbols = [
-      'predictPrice', 'formatCurrency', 'ValuationResults', 'PropertyForm',
-      'InvestmentCalculator', 'useToast', 'create_access_token', 'verify_password',
-      'add_feature', 'fill_col', 'calculateMetrics', 'handleFilterChange'
-    ]
-  } else {
-    // Clean source scaling (typically 1.4 - 2.2 functions per clean source file)
-    const density = candidatePool.length > 0 && directFunctionsCount > 0
-      ? directFunctionsCount / candidatePool.length
-      : 1.8
-    functionsAnalyzed = Math.max(directFunctionsCount, Math.round(sourcePaths.length * Math.min(3.2, Math.max(1.4, density))))
-  }
+  // Clean function calculation based on parsed source files
+  const density = candidatePool.length > 0 && directFunctionsCount > 0
+    ? directFunctionsCount / candidatePool.length
+    : 1.8
+  const functionsAnalyzed = Math.max(directFunctionsCount, Math.round(sourcePaths.length * Math.min(3.2, Math.max(1.4, density))))
 
   // Step 6: SAST Code & Dependency Security Audits
   const codeVulnerabilities = []
 
   // Check CVEs in dependencies
   let npmCveCount = 0
+  const matchedCves = []
   for (const cve of KNOWN_PACKAGE_CVES) {
     if (cve.ecosystem === 'npm') {
       const match = frontendProdDeps.includes(cve.name) || frontendDevDeps.includes(cve.name)
       if (match) {
         npmCveCount += cve.cveCount || 1
+        matchedCves.push(cve)
       }
     } else if (cve.ecosystem === 'pip') {
       const match = backendPipDeps.includes(cve.name)
       if (match) {
         npmCveCount += cve.cveCount || 1
+        matchedCves.push(cve)
       }
     }
   }
@@ -486,21 +429,7 @@ export async function runComprehensiveScan({
     } catch {}
   }
 
-  // Default findings for real-estate project if targets matched
-  const hasEstateBackend = cleanPaths.some((p) => p.includes('Real-estate-project-backend') || p.includes('Backend/main.py'))
-  const hasEstateFrontend = cleanPaths.some((p) => p.includes('Real-estate-project-frontend') || tsxCount > 40)
-
-  let totalSecurityIssues = npmCveCount + codeVulnerabilities.length
-
-  if (hasEstateBackend || hasEstateFrontend || (tsxCount === 72 && pyCount === 3)) {
-    // Exact verified total from Screenshot 2, 3, 4:
-    // 24 CVEs (17 High + 7 Moderate/Low) + 5 architectural/code = 29 issues
-    totalSecurityIssues = 29
-  } else if (totalSecurityIssues === 0) {
-    // Check if .env or credentials committed
-    const exposedEnv = cleanPaths.filter((p) => /(?:^|\/)(\.env|\.env\.local|id_rsa|credentials\.json)$/i.test(p))
-    totalSecurityIssues = exposedEnv.length
-  }
+  const totalSecurityIssues = npmCveCount + codeVulnerabilities.length
 
   // Step 7: Architecture Taxonomy & Monorepo Breakdown
   let architecturePattern = 'Modular Full-Stack Architecture'
@@ -517,192 +446,142 @@ export async function runComprehensiveScan({
     layerSummary = 'FastAPI / ASGI Endpoints -> ML Pipeline -> SQLite / DB'
   }
 
-  // Project Analysis Summary Table (Screenshot 2 Spec)
+  // Project Analysis Summary Table (Dynamic and Universal)
+  const fileBreakdowns = []
+  if (tsxCount > 0) fileBreakdowns.push(`${tsxCount} TSX ( .tsx ) UI components & pages`)
+  if (tsCount > 0) fileBreakdowns.push(`${tsCount} TypeScript ( .ts ) logic & utility files`)
+  if (jsCount > 0) fileBreakdowns.push(`${jsCount} JavaScript ( .js/.jsx ) source files`)
+  if (pyCount > 0) fileBreakdowns.push(`${pyCount} Python ( .py ) backend & script files`)
+  if (ipynbCount > 0) fileBreakdowns.push(`${ipynbCount} Jupyter Notebooks ( .ipynb )`)
+  if (cssCount > 0) fileBreakdowns.push(`${cssCount} CSS stylesheets ( .css/.scss )`)
+  if (jsonCount > 0) fileBreakdowns.push(`${jsonCount} JSON configuration & data files`)
+  if (csvCount > 0) fileBreakdowns.push(`${csvCount} CSV datasets ( .csv )`)
+  if (mdCount > 0) fileBreakdowns.push(`${mdCount} Markdown docs ( .md )`)
+  if (psCount > 0) fileBreakdowns.push(`${psCount} Shell & automation scripts`)
+  if (mediaCount > 0) fileBreakdowns.push(`${mediaCount} Media, binaries, and templates`)
+  if (fileBreakdowns.length === 0) fileBreakdowns.push(`${totalFilesScanned} project files`)
+
   const summaryTable = [
     {
       category: 'Total No. of Files',
-      countQuantity: `${totalFilesScanned} files (source) (${Math.max(12, totalFilesScanned - 14)} tracked in git)`,
-      breakdown: [
-        `${tsxCount || 72} TSX ( .tsx ) UI components & pages`,
-        `${jsonCount || 12} JSON configuration & data schema files`,
-        `${tsCount || 8} TypeScript ( .ts ) logic & utility files`,
-        `${ipynbCount || 5} Jupyter Notebooks ( .ipynb ) for ML modeling`,
-        `${csvCount || 5} CSV datasets ( .csv )`,
-        `${mdCount || 5} Markdown docs ( .md )`,
-        `${cssCount || 4} CSS stylesheets ( .css )`,
-        `${jsCount || 4} JavaScript files ( .js )`,
-        `${pyCount || 3} Python files ( .py )`,
-        `${psCount || 3} PowerShell scripts ( .ps1 )`,
-        `${mediaCount || 16} Images, binaries, templates, and models ( .png, .svg, .pkl, .db, .html )`
-      ]
+      countQuantity: `${totalFilesScanned} files (scanned in project)`,
+      breakdown: fileBreakdowns
     },
     {
       category: 'Languages Used',
-      countQuantity: `${languagesDetectedCount} core languages (+ data formats & shell)`,
-      breakdown: [
-        `TypeScript / TSX: ${tsxCount + tsCount || 80} files (~9,689 lines, 44.3% of codebase)`,
-        `Python: ${pyCount || 3} files + ${ipynbCount || 5} notebooks (553 lines, FastAPI backend & ML models)`,
-        `JavaScript / JSX: ${jsCount || 6} files (202 lines, build configs & demo UI)`,
-        `CSS / Tailwind: ${cssCount || 4} stylesheets (601 lines)`,
-        `JSON / CSV: ${(jsonCount || 12) + (csvCount || 5)} data files (10,722 lines + 1.37 MB tabular data)`,
-        `PowerShell: ${psCount || 3} automation scripts (58 lines)`
-      ]
+      countQuantity: `${languagesDetectedCount} core language(s)`,
+      breakdown: coreLanguages.map((l) => `${l}: detected in project source files`)
     },
     {
       category: 'Functions Analyzed',
-      countQuantity: `${functionsAnalyzed} functions (+ 6 Pydantic classes)`,
-      breakdown: [
-        `131 Frontend TypeScript/React functions, hooks, and components (e.g., predictPrice, formatCurrency, ValuationResults, PropertyForm, InvestmentCalculator, useToast)`,
-        `20 Python API endpoints & auth handlers in Backend/main.py (e.g., /predict, /auth/signup, /auth/login, /report, create_access_token, verify_password)`,
-        `6 Pydantic data schemas ( RawRow, UserSignup, UserLogin, Token, ReportRequest, CreateApiKey )`,
-        `2 Data engineering functions in notebooks ( fill_col, add_feature )`
-      ]
+      countQuantity: `${functionsAnalyzed} functions and symbols`,
+      breakdown: extractedSymbols.length > 0
+        ? [`Key symbols extracted: ${extractedSymbols.slice(0, 10).join(', ')}`]
+        : [`${functionsAnalyzed} functions analyzed across source files`]
     },
     {
       category: 'Dependencies Found',
-      countQuantity: `${dependenciesFound} packages (across all manifests)`,
+      countQuantity: `${dependenciesFound} packages`,
       breakdown: [
-        `${frontendProdDeps.length || 53} Frontend Production packages ( react, react-dom, react-router-dom, Radix UI suite, leaflet, recharts, zod, tailwindcss )`,
-        `${frontendDevDeps.length || 19} Frontend Dev dependencies ( vite, typescript, eslint, @vitejs/plugin-react-swc, postcss )`,
-        `${backendPipDeps.length || 37} Backend Python packages ( fastapi, uvicorn, pydantic, scikit-learn, xgboost, pandas, numpy, passlib[argon2], python-jose, reportlab, sqlite3 )`
+        ...(frontendProdDeps.length > 0 ? [`${frontendProdDeps.length} Frontend Production packages`] : []),
+        ...(frontendDevDeps.length > 0 ? [`${frontendDevDeps.length} Frontend Dev packages`] : []),
+        ...(backendPipDeps.length > 0 ? [`${backendPipDeps.length} Python packages`] : []),
+        ...(goDeps.length > 0 ? [`${goDeps.length} Go modules`] : []),
+        ...(rustDeps.length > 0 ? [`${rustDeps.length} Cargo crates`] : [])
       ]
     },
     {
       category: 'Issues Found',
-      countQuantity: `${totalSecurityIssues} issues (24 CVEs + 5 architectural)`,
+      countQuantity: `${totalSecurityIssues} security & code issue(s)`,
       breakdown: [
-        `17 High-Severity CVEs ( zod memory DoS, @remix-run/router open-redirect XSS, vite / launch-editor command bypasses )`,
-        `7 Moderate / Low CVEs in npm packages`,
-        `Hardcoded JWT secret key ( SECRET_KEY = "your-secret-key-here" ) in Backend/main.py`,
-        `Plaintext password storage in browser localStorage in Login.tsx`,
-        `Permissive CORS with credentials ( allow_origins=["*"] + allow_credentials=True )`,
-        `Insecure Deserialization ( joblib.load(MODEL_PATH) ) in Backend/main.py`,
-        `Plaintext API keys in SQLite database in Backend/main.py`,
-        `Unprotected Endpoint ( /predict_local ) in Backend/main.py`
+        ...(matchedCves.length > 0 ? [`${npmCveCount} Package Advisory CVEs in declared dependencies`] : []),
+        ...codeVulnerabilities.map((v) => `${v.severity}: ${v.description} in ${v.target}`)
       ]
     }
   ]
 
-  // Multi-Component Breakdown (Screenshot 3 Spec)
+  // Multi-Component Breakdown
   const componentBreakdown = [
     {
       metric: 'Total Files',
-      frontend: `${tsxCount + tsCount + jsCount + cssCount + 28 || 118} files (TSX, TS, CSS, assets, configs)`,
-      backend: `${pyCount + ipynbCount + csvCount + 12 || 26} files (Python, notebooks, CSVs, .pkl, .db)`,
+      frontend: `${tsxCount + tsCount + jsCount + cssCount} frontend source files`,
+      backend: `${pyCount + ipynbCount + (extensionCounts['.java'] || 0) + (extensionCounts['.go'] || 0)} backend files`,
       overall: `${totalFilesScanned} files`
     },
     {
       metric: 'Primary Languages',
-      frontend: 'TypeScript (TSX/TS), JavaScript, CSS, HTML',
-      backend: 'Python, Jupyter Notebooks, CSV/JSON, PowerShell',
-      overall: `${languagesDetectedCount} Languages (+ data/scripts)`
-    },
-    {
-      metric: 'Functions Analyzed',
-      frontend: '131 components, hooks, and helpers',
-      backend: '22 endpoints, auth helpers & notebook functions',
-      overall: `${functionsAnalyzed} functions`
+      frontend: [tsCount > 0 && 'TypeScript', jsCount > 0 && 'JavaScript', cssCount > 0 && 'CSS'].filter(Boolean).join(', ') || 'N/A',
+      backend: [pyCount > 0 && 'Python', extensionCounts['.java'] && 'Java', extensionCounts['.go'] && 'Go', extensionCounts['.rs'] && 'Rust'].filter(Boolean).join(', ') || 'N/A',
+      overall: coreLanguages.join(', ') || 'Generic'
     },
     {
       metric: 'Dependencies',
-      frontend: `${frontendProdDeps.length + frontendDevDeps.length || 72} npm packages (${frontendProdDeps.length || 53} prod + ${frontendDevDeps.length || 19} dev)`,
-      backend: `${backendPipDeps.length || 37} pip packages (web, auth, ML, PDF)`,
+      frontend: `${frontendProdDeps.length + frontendDevDeps.length} npm packages`,
+      backend: `${backendPipDeps.length + goDeps.length + rustDeps.length} backend packages`,
       overall: `${dependenciesFound} dependencies`
     },
     {
       metric: 'Security Issues',
-      frontend: '24 npm CVEs + 1 plaintext password in localStorage',
-      backend: '4 code vulnerabilities (Hardcoded JWT key, CORS, pickle, API keys)',
+      frontend: `${codeVulnerabilities.filter(v => v.target.includes('.tsx') || v.target.includes('.jsx') || v.target.includes('.ts') || v.target.includes('.js')).length} code issues`,
+      backend: `${codeVulnerabilities.filter(v => v.target.includes('.py') || v.target.includes('.go') || v.target.includes('.java')).length} code issues`,
       overall: `${totalSecurityIssues} issues`
     }
   ]
 
-  // Security Issues & Vulnerabilities (Screenshot 4 Spec)
+  // Security Issues & Vulnerabilities (Real Findings Only)
   const securityVulnerabilities = [
-    {
-      severity: 'Critical',
-      issueType: 'Hardcoded Secret',
-      description: 'Hardcoded JWT signing secret ( SECRET_KEY = "your-secret-key-here" )',
-      target: 'Backend/main.py#L59',
-      risk: 'Allows unauthorized attackers to forge valid admin/user authentication tokens.'
-    },
-    {
-      severity: 'Critical',
-      issueType: 'Credential Exposure',
-      description: 'Plaintext user accounts & passwords stored directly in browser localStorage',
-      target: 'Login.tsx#L58-L77',
-      risk: 'Any XSS exploit or malicious browser extension can exfiltrate all stored credentials.'
-    },
-    {
-      severity: 'High',
-      issueType: 'Insecure CORS',
-      description: 'allow_origins=["*"] configured alongside allow_credentials=True',
-      target: 'Backend/main.py#L46-L51',
-      risk: 'Violates CORS standard and allows any website to make authenticated requests.'
-    },
-    {
-      severity: 'High',
-      issueType: 'Insecure Deserialization',
-      description: 'Unvalidated pickle loading ( joblib.load(MODEL_PATH) )',
-      target: 'Backend/main.py#L36',
-      risk: 'Loading a modified .pkl file allows arbitrary remote Python code execution.'
-    },
-    {
-      severity: 'High',
-      issueType: 'Plaintext API Keys',
-      description: 'API keys stored unhashed in SQLite database',
-      target: 'Backend/main.py#L326-L329',
-      risk: 'Direct database access or backup leaks expose all active user API tokens.'
-    },
-    {
-      severity: 'High',
-      issueType: 'Package CVEs (17 High)',
-      description: 'zod (<4.6.6), @remix-run/router, vite, brace-expansion',
-      target: 'Real-estate-project-frontend/package.json',
-      risk: 'DoS via oversized schemas, Open Redirect XSS, and Windows CLI path traversal.'
-    },
-    {
-      severity: 'Medium',
-      issueType: 'Unprotected Endpoint',
-      description: '/predict_local lacks API key enforcement or rate limiting',
-      target: 'Backend/main.py#L229-L252',
-      risk: 'Allows resource exhaustion by scraping the ML model without an account.'
-    }
+    ...codeVulnerabilities,
+    ...matchedCves.map((cve) => ({
+      severity: cve.severity === 'high' ? 'High' : 'Medium',
+      issueType: cve.title,
+      description: cve.description,
+      target: `manifest: ${cve.name}`,
+      risk: cve.risk
+    }))
   ]
 
-  // Project Dependencies (Screenshot 5 Spec)
-  const projectDependencies = [
-    {
+  // Project Dependencies (Real Dependencies Only)
+  const projectDependencies = []
+  if (frontendProdDeps.length > 0) {
+    projectDependencies.push({
       ecosystem: 'Frontend',
       scope: 'Production (dependencies)',
-      packageCount: frontendProdDeps.length || 53,
-      keyPackages: 'react (18.3.1), react-dom, react-router-dom (6.30.1), @radix-ui/* (18 modules), @tanstack/react-query, recharts, leaflet, react-leaflet, react-hook-form, zod, tailwindcss'
-    },
-    {
+      packageCount: frontendProdDeps.length,
+      keyPackages: frontendProdDeps.slice(0, 10).join(', ')
+    })
+  }
+  if (frontendDevDeps.length > 0) {
+    projectDependencies.push({
       ecosystem: 'Frontend',
       scope: 'Build & Dev (devDependencies)',
-      packageCount: frontendDevDeps.length || 19,
-      keyPackages: 'vite (5.4.19), @vitejs/plugin-react-swc, typescript (5.8.3), eslint (9.32.0), postcss, autoprefixer, rollup (4.53.2)'
-    },
-    {
-      ecosystem: 'Backend',
-      scope: 'Web Framework & Server',
-      packageCount: 5,
-      keyPackages: 'fastapi (0.116.2), uvicorn (0.35.0), starlette (0.48.0), pydantic (2.11.9), pydantic_core'
-    },
-    {
-      ecosystem: 'Backend',
-      scope: 'Auth, Security & PDF',
-      packageCount: 5,
-      keyPackages: 'passlib[argon2] (1.7.4), python-jose[cryptography] (3.3.0), python-multipart, reportlab (>=3.6.13)'
-    },
-    {
-      ecosystem: 'Backend',
-      scope: 'Machine Learning & Data',
-      packageCount: 8,
-      keyPackages: 'scikit-learn (1.7.2), xgboost (3.0.5), pandas (2.3.2), numpy (2.3.3), scipy (1.16.2), joblib (1.5.2), shap, sqlite3'
-    }
-  ]
+      packageCount: frontendDevDeps.length,
+      keyPackages: frontendDevDeps.slice(0, 10).join(', ')
+    })
+  }
+  if (backendPipDeps.length > 0) {
+    projectDependencies.push({
+      ecosystem: 'Python / Backend',
+      scope: 'Requirements',
+      packageCount: backendPipDeps.length,
+      keyPackages: backendPipDeps.slice(0, 10).join(', ')
+    })
+  }
+  if (goDeps.length > 0) {
+    projectDependencies.push({
+      ecosystem: 'Go',
+      scope: 'Modules',
+      packageCount: goDeps.length,
+      keyPackages: goDeps.slice(0, 10).join(', ')
+    })
+  }
+  if (rustDeps.length > 0) {
+    projectDependencies.push({
+      ecosystem: 'Rust',
+      scope: 'Crates',
+      packageCount: rustDeps.length,
+      keyPackages: rustDeps.slice(0, 10).join(', ')
+    })
+  }
 
   return {
     metrics: {

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { loginUser } from '../services/api'
+import { loginUser, establishUserSession } from '../services/api'
 import Plasma from '../components/Plasma'
 import SocialAuthButtons from '../components/SocialAuthButtons'
 
@@ -18,9 +18,7 @@ export default function Login() {
     try {
       const res = await loginUser({ email, password })
       if (res.token) {
-        localStorage.setItem('sycnops_token', res.token)
-        localStorage.setItem('sycnops_user', JSON.stringify(res.user))
-        window.dispatchEvent(new Event('sycnops_user_updated'))
+        establishUserSession(res.token, res.user)
         navigate('/dashboard')
       } else {
         setError(res.message || 'Sign in failed. Check your credentials.')
@@ -59,9 +57,7 @@ export default function Login() {
             onDone={() => setLoading(false)}
             onError={setError}
             onSuccess={(token, user) => {
-              localStorage.setItem('sycnops_token', token)
-              localStorage.setItem('sycnops_user', JSON.stringify(user))
-              window.dispatchEvent(new Event('sycnops_user_updated'))
+              establishUserSession(token, user)
               navigate('/dashboard')
             }}
           />

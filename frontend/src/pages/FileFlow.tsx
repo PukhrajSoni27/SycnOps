@@ -24,27 +24,19 @@ import {
   Search,
   Filter,
   RefreshCw,
-  Layers,
   ArrowRight,
   Code2,
   Copy,
   Check,
-  ExternalLink,
-  ChevronRight,
   Network,
-  Zap,
-  ShieldCheck,
   AlertCircle,
   FileText,
-  Boxes,
-  Sparkles,
   GitBranch,
   X,
   AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
   Repeat,
-  Radio,
   Unplug,
   Plus,
   Minus,
@@ -57,6 +49,7 @@ import {
   useFileFlowPathsQuery
 } from '@/hooks/useApi'
 import { FileFlowNodeData } from '@/services/api'
+import { useRepositoryContext } from '@/context/RepositoryContext'
 
 
 // ── Custom Node Components ─────────────────────────────────────
@@ -667,7 +660,8 @@ const nodeTypes = {
 // ── Main Page Component ────────────────────────────────────────
 
 function FileFlowContent() {
-  const [projectId] = useState('sycnops')
+  const { selectedRepo, selectedRepoId } = useRepositoryContext()
+  const projectId = selectedRepoId || (selectedRepo?.id ? String(selectedRepo.id) : selectedRepo?.name) || ''
   const [searchQuery, setSearchQuery] = useState('')
   const deferredSearch = useDeferredValue(searchQuery)
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'frontend' | 'backend' | 'database' | 'config' | 'disconnected' | 'circular'>('all')
@@ -692,7 +686,7 @@ function FileFlowContent() {
     return selectedNode.data?.path || null
   }, [selectedNode])
 
-  const { data: fileDetails, isLoading: detailsLoading } = useFileDetailsQuery(selectedFilePath)
+  const { data: fileDetails, isLoading: _detailsLoading } = useFileDetailsQuery(selectedFilePath, projectId)
 
   // Path tracing query
   const { data: tracePaths } = useFileFlowPathsQuery(sourceTraceNode, targetTraceNode, projectId)
@@ -931,6 +925,20 @@ function FileFlowContent() {
 
   const handleRescan = () => {
     scanMutation.mutate(projectId)
+  }
+
+  if (!projectId) {
+    return (
+      <div style={{ padding: '80px 20px', textAlign: 'center', maxWidth: 600, margin: '0 auto' }}>
+        <Network style={{ width: 48, height: 48, color: '#E8D2B5', margin: '0 auto 16px', display: 'block' }} />
+        <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '28px', color: 'var(--text)', marginBottom: 8 }}>
+          No Repository Selected
+        </h2>
+        <p style={{ fontFamily: 'var(--font-sans)', fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+          Please select or import a repository from the header dropdown above to view its live File Flow architecture.
+        </p>
+      </div>
+    )
   }
 
   return (

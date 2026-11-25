@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { RepositoryProvider } from './context/RepositoryContext'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -29,25 +30,27 @@ function Guard({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/dashboard" element={<Guard><Dashboard /></Guard>} />
-        <Route path="/repositories" element={<Guard><Repositories /></Guard>} />
-        <Route path="/repositories/:repoId" element={<Guard><RepoDetail /></Guard>} />
-        <Route path="/repositories/:repoId/analysis" element={<Guard><RepoAnalysis /></Guard>} />
-        <Route path="/pull-requests" element={<Guard><PullRequests /></Guard>} />
-        <Route path="/issues" element={<Guard><Issues /></Guard>} />
-        <Route path="/pipeline" element={<Guard><Pipeline /></Guard>} />
-        <Route path="/pipelines" element={<Guard><Pipeline /></Guard>} />
-        <Route path="/code-flow" element={<Guard><CodeFlow /></Guard>} />
-        <Route path="/file-flow" element={<Guard><FileFlow /></Guard>} />
-        <Route path="/file-topology" element={<Guard><FileTopology /></Guard>} />
-        <Route path="/code-quality" element={<Guard><CodeQuality /></Guard>} />
-        <Route path="/analytics" element={<Guard><Analytics /></Guard>} />
-        <Route path="/profile" element={<Guard><Profile /></Guard>} />
-      </Routes>
+      <RepositoryProvider>
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/dashboard" element={<Guard><Dashboard /></Guard>} />
+          <Route path="/repositories" element={<Guard><Repositories /></Guard>} />
+          <Route path="/repositories/:repoId" element={<Guard><RepoDetail /></Guard>} />
+          <Route path="/repositories/:repoId/analysis" element={<Guard><RepoAnalysis /></Guard>} />
+          <Route path="/pull-requests" element={<Guard><PullRequests /></Guard>} />
+          <Route path="/issues" element={<Guard><Issues /></Guard>} />
+          <Route path="/pipeline" element={<Guard><Pipeline /></Guard>} />
+          <Route path="/pipelines" element={<Guard><Pipeline /></Guard>} />
+          <Route path="/code-flow" element={<Guard><CodeFlow /></Guard>} />
+          <Route path="/file-flow" element={<Guard><FileFlow /></Guard>} />
+          <Route path="/file-topology" element={<Guard><FileTopology /></Guard>} />
+          <Route path="/code-quality" element={<Guard><CodeQuality /></Guard>} />
+          <Route path="/analytics" element={<Guard><Analytics /></Guard>} />
+          <Route path="/profile" element={<Guard><Profile /></Guard>} />
+        </Routes>
+      </RepositoryProvider>
     </BrowserRouter>
   )
 }

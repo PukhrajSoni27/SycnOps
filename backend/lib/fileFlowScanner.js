@@ -28,7 +28,8 @@ const rootDir = path.resolve(__dirname, '../..')
 const frontendSrcDir = path.resolve(rootDir, 'frontend', 'src')
 const backendDir = path.resolve(rootDir, 'backend')
 
-// In-memory cache for fast retrieval and offline resilience
+// In-memory cache for fast retrieval and offline resilience (keyed by `${userId}:${projectId}`)
+const fileFlowCache = new Map()
 let cachedFileFlowAnalysis = null
 
 const IGNORED_DIRS = new Set([
@@ -106,10 +107,11 @@ function parseCodeAST(code, filePath) {
 /**
  * Inspects a JavaScript/TypeScript source file using AST.
  */
-function inspectJsFile(filePath, code) {
-  const relPath = path.relative(rootDir, filePath).replace(/\\/g, '/')
+function inspectJsFile(filePath, code, baseDir = rootDir) {
+  const relPath = path.relative(baseDir, filePath).replace(/\\/g, '/')
   const ext = path.extname(filePath).toLowerCase()
-  const isFrontend = relPath.startsWith('frontend')
+  const lowerRel = relPath.toLowerCase()
+  const isFrontend = lowerRel.includes('frontend') || lowerRel.includes('client') || lowerRel.includes('src') || lowerRel.includes('ui')
 
   const ast = parseCodeAST(code, filePath)
 
@@ -322,8 +324,8 @@ function inspectJsFile(filePath, code) {
 /**
  * Inspects a Python source file (FastAPI, ML, Database operations).
  */
-function inspectPythonFile(filePath, code) {
-  const relPath = path.relative(rootDir, filePath).replace(/\\/g, '/')
+function inspectPythonFile(filePath, code, baseDir = rootDir) {
+  const relPath = path.relative(baseDir, filePath).replace(/\\/g, '/')
   const ext = '.py'
   const lines = code.split('\n')
 
@@ -448,7 +450,7 @@ function walkSourceFiles(dir, collected = []) {
 /**
  * Resolves an import statement path to a target file in the repository.
  */
-function resolveImportPath(importerPath, importSource, fileMap) {
+function resolveImportPath(importerPath, importSource, fileMap, baseDir = rootDir) {
   if (!importSource.startsWith('.') && !importSource.startsWith('@/')) {
     // External npm / python package
     return null
@@ -456,7 +458,7 @@ function resolveImportPath(importerPath, importSource, fileMap) {
 
   let candidate = ''
   if (importSource.startsWith('@/')) {
-    candidate = path.resolve(frontendSrcDir, importSource.replace(/^@\//, ''))
+    candidate = path.resolve(baseDir, 'src', importSource.replace(/^@\//, ''))
   } else {
     candidate = path.resolve(path.dirname(importerPath), importSource)
   }
@@ -465,7 +467,7 @@ function resolveImportPath(importerPath, importSource, fileMap) {
   const testExtensions = ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js']
   for (const ext of testExtensions) {
     const fullTest = candidate + ext
-    const relKey = path.relative(rootDir, fullTest).replace(/\\/g, '/')
+    const relKey = path.relative(baseDir, fullTest).replace(/\\/g, '/')
     if (fileMap.has(relKey)) {
       return relKey
     }
@@ -474,12 +476,16 @@ function resolveImportPath(importerPath, importSource, fileMap) {
 }
 
 /**
- * Categorizes a file into frontend, backend, database, or config.
+ * Categorizes a file into frontend, backend, database, components, utilities, config, or docs.
  */
 export function categorizeFile(relPath) {
-  const norm = relPath.replace(/\\/g, '/')
+  const norm = relPath.replace(/\\/g, '/').toLowerCase()
   if (
-    norm.includes('models/') ||
+    norm.includes('models') ||
+    norm.includes('schema') ||
+    norm.includes('entity') ||
+    norm.includes('entities') ||
+    norm.includes('database') ||
     norm.includes('config/firebase') ||
     norm.includes('config/db') ||
     norm.includes('lib/firebase')
@@ -487,20 +493,63 @@ export function categorizeFile(relPath) {
     return 'database'
   }
   if (
+    norm.includes('component') ||
+    norm.includes('/components/') ||
+    norm.includes('pages/') ||
+    norm.includes('views/')
+  ) {
+    return 'components'
+  }
+  if (
+    norm.includes('util') ||
+    norm.includes('helper') ||
+    norm.includes('services/') ||
+    norm.includes('lib/')
+  ) {
+    return 'utilities'
+  }
+  if (
     norm.endsWith('package.json') ||
     norm.endsWith('tsconfig.json') ||
     norm.endsWith('vite.config.ts') ||
-    norm.includes('.env')
+    norm.endsWith('vite.config.js') ||
+    norm.endsWith('eslint.config.js') ||
+    norm.includes('requirements.txt') ||
+    norm.includes('pyproject.toml') ||
+    norm.includes('.env') ||
+    norm.endsWith('.config.js')
   ) {
     return 'config'
   }
-  if (norm.startsWith('frontend/')) {
+  if (
+    norm.endsWith('.md') ||
+    norm.endsWith('.txt') ||
+    norm.includes('docs/')
+  ) {
+    return 'docs'
+  }
+  if (
+    norm.startsWith('frontend') ||
+    norm.includes('/frontend/') ||
+    norm.includes('/client/') ||
+    norm.includes('/src/') ||
+    norm.endsWith('.tsx') ||
+    norm.endsWith('.jsx')
+  ) {
     return 'frontend'
   }
-  if (norm.startsWith('backend/')) {
+  if (
+    norm.startsWith('backend') ||
+    norm.includes('/backend/') ||
+    norm.includes('/server/') ||
+    norm.includes('/api/') ||
+    norm.endsWith('.py') ||
+    norm.includes('controllers') ||
+    norm.includes('routes')
+  ) {
     return 'backend'
   }
-  return 'config'
+  return 'utilities'
 }
 
 /**
@@ -558,26 +607,41 @@ export function detectCircularDependencies(edges) {
  * Main Repository & File Flow Scanner.
  * Builds real nodes, edges, relationships, and metadata.
  */
-export async function runFileFlowScan(projectId = 'sycnops') {
+export async function runFileFlowScan(projectId = 'sycnops', repoDir = null, userId = null) {
   const startTime = Date.now()
   const scannedFiles = []
   const fileMap = new Map()
 
-  // 1. Discover all source files across frontend/src and backend
-  const allPaths = [
-    ...walkSourceFiles(frontendSrcDir),
-    ...walkSourceFiles(backendDir)
-  ]
+  const baseDir = (repoDir && fs.existsSync(repoDir)) ? repoDir : rootDir
+  const isCustomRepo = baseDir !== rootDir
+
+  // 1. Discover all source files across target repository
+  const allPaths = isCustomRepo
+    ? walkSourceFiles(baseDir)
+    : [
+        ...walkSourceFiles(frontendSrcDir),
+        ...walkSourceFiles(backendDir)
+      ]
 
   // Add configuration and manifest files
-  const configFiles = [
-    path.join(rootDir, 'package.json'),
-    path.join(rootDir, 'frontend', 'package.json'),
-    path.join(rootDir, 'frontend', 'vite.config.ts'),
-    path.join(rootDir, 'frontend', 'tsconfig.json'),
-    path.join(rootDir, 'backend', 'package.json'),
-    path.join(rootDir, 'backend', '.env.example')
-  ]
+  const configFiles = isCustomRepo
+    ? [
+        path.join(baseDir, 'package.json'),
+        path.join(baseDir, 'tsconfig.json'),
+        path.join(baseDir, 'vite.config.ts'),
+        path.join(baseDir, 'vite.config.js'),
+        path.join(baseDir, 'requirements.txt'),
+        path.join(baseDir, 'pyproject.toml')
+      ]
+    : [
+        path.join(rootDir, 'package.json'),
+        path.join(rootDir, 'frontend', 'package.json'),
+        path.join(rootDir, 'frontend', 'vite.config.ts'),
+        path.join(rootDir, 'frontend', 'tsconfig.json'),
+        path.join(rootDir, 'backend', 'package.json'),
+        path.join(rootDir, 'backend', '.env.example')
+      ]
+
   configFiles.forEach((p) => {
     if (fs.existsSync(p) && !allPaths.includes(p)) {
       allPaths.push(p)
@@ -591,11 +655,11 @@ export async function runFileFlowScan(projectId = 'sycnops') {
       const ext = path.extname(fPath).toLowerCase()
       let meta = null
       if (ext === '.py') {
-        meta = inspectPythonFile(fPath, content)
+        meta = inspectPythonFile(fPath, content, baseDir)
       } else if (['.ts', '.tsx', '.js', '.jsx'].includes(ext)) {
-        meta = inspectJsFile(fPath, content)
+        meta = inspectJsFile(fPath, content, baseDir)
       } else {
-        const rel = path.relative(rootDir, fPath).replace(/\\/g, '/')
+        const rel = path.relative(baseDir, fPath).replace(/\\/g, '/')
         meta = {
           path: rel,
           fullPath: fPath,
@@ -694,7 +758,7 @@ export async function runFileFlowScan(projectId = 'sycnops') {
   // 5. Connect Imports (File -> File)
   for (const f of scannedFiles) {
     for (const imp of f.imports) {
-      const resolvedTarget = resolveImportPath(f.fullPath, imp.source, fileMap)
+      const resolvedTarget = resolveImportPath(f.fullPath, imp.source, fileMap, baseDir)
       if (resolvedTarget) {
         addEdge(
           f.path,
@@ -925,15 +989,19 @@ export async function runFileFlowScan(projectId = 'sycnops') {
 
   cachedFileFlowAnalysis = result
 
-  // 11. Persist to Firebase Firestore (collection: `file_flows`)
+  // 11. Persist to cache and optional Firebase Firestore
+  const cacheKey = `${userId || 'global'}:${projectId}`
+  fileFlowCache.set(cacheKey, result)
+  fileFlowCache.set(String(projectId), result)
+
   if (isFirestoreConnected()) {
     try {
       const db = getDB()
       if (db) {
         // Sanitize payload for Firestore
         const docPayload = JSON.parse(JSON.stringify(result))
-        await db.collection('file_flows').doc(`${projectId}_latest`).set(docPayload, { merge: true })
-        console.log(`[Firebase Firestore] Saved File Flow analysis: ${projectId}_latest (${nodes.length} nodes, ${edges.length} edges)`)
+        await db.collection('file_flows').doc(`${cacheKey}_latest`).set(docPayload, { merge: true })
+        console.log(`[Firebase Firestore] Saved File Flow analysis: ${cacheKey}_latest (${nodes.length} nodes, ${edges.length} edges)`)
       }
     } catch (dbErr) {
       console.warn('[Firebase Firestore] Could not save file flow document:', dbErr.message)
@@ -946,36 +1014,42 @@ export async function runFileFlowScan(projectId = 'sycnops') {
 /**
  * Returns latest cached or stored analysis.
  */
-export async function getLatestFileFlowAnalysis(projectId = 'sycnops') {
-  if (cachedFileFlowAnalysis) {
-    return cachedFileFlowAnalysis
+export async function getLatestFileFlowAnalysis(projectId = 'sycnops', userId = null, repoDir = null) {
+  const cacheKey = `${userId || 'global'}:${projectId}`
+  if (fileFlowCache.has(cacheKey)) {
+    return fileFlowCache.get(cacheKey)
+  }
+  if (fileFlowCache.has(String(projectId))) {
+    return fileFlowCache.get(String(projectId))
   }
 
   if (isFirestoreConnected()) {
     try {
       const db = getDB()
       if (db) {
-        const doc = await db.collection('file_flows').doc(`${projectId}_latest`).get()
+        const doc = await db.collection('file_flows').doc(`${cacheKey}_latest`).get()
         if (doc.exists) {
-          cachedFileFlowAnalysis = doc.data()
-          return cachedFileFlowAnalysis
+          const data = doc.data()
+          fileFlowCache.set(cacheKey, data)
+          return data
         }
       }
     } catch (e) {}
   }
 
   // Trigger scan if not yet generated
-  return await runFileFlowScan(projectId)
+  return await runFileFlowScan(projectId, repoDir, userId)
 }
 
 /**
  * Retrieves details and raw code for an individual file.
  */
-export function getFileDetails(relFilePath) {
+export function getFileDetails(relFilePath, repoDir = null) {
   const cleanPath = relFilePath.replace(/^[/\\]+/, '')
-  const fullPath = path.resolve(rootDir, cleanPath)
+  const baseDir = (repoDir && fs.existsSync(repoDir)) ? repoDir : rootDir
+  const fullPath = path.resolve(baseDir, cleanPath)
 
-  if (!fs.existsSync(fullPath) || !fullPath.startsWith(rootDir)) {
+  if (!fs.existsSync(fullPath) || !fullPath.startsWith(baseDir)) {
     throw new Error('File not found or access denied')
   }
 
@@ -984,9 +1058,9 @@ export function getFileDetails(relFilePath) {
 
   let analysis = null
   if (ext === '.py') {
-    analysis = inspectPythonFile(fullPath, code)
+    analysis = inspectPythonFile(fullPath, code, baseDir)
   } else if (['.ts', '.tsx', '.js', '.jsx'].includes(ext)) {
-    analysis = inspectJsFile(fullPath, code)
+    analysis = inspectJsFile(fullPath, code, baseDir)
   }
 
   return {

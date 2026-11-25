@@ -2,15 +2,23 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Star, GitFork, AlertCircle, GitPullRequest, Users, Shield, Activity, ExternalLink, Loader2, Lock, Globe } from 'lucide-react'
 import { apiGet } from '@/services/api'
+import { useRepositoryContext } from '@/context/RepositoryContext'
 
 export default function RepoDetail() {
   const { repoId } = useParams()
+  const { selectedRepoId, setSelectedRepoId } = useRepositoryContext()
   const [detail, setDetail] = useState<any>(null)
   const [analysis, setAnalysis] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [analysisLoading, setAnalysisLoading] = useState(true)
   const [error, setError] = useState('')
   const [activeTab, setActiveTab] = useState<'overview' | 'issues' | 'prs' | 'commits'>('overview')
+
+  useEffect(() => {
+    if (repoId && selectedRepoId !== repoId) {
+      setSelectedRepoId(repoId)
+    }
+  }, [repoId, selectedRepoId, setSelectedRepoId])
 
   useEffect(() => {
     async function load() {

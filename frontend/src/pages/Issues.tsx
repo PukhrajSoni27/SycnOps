@@ -4,6 +4,7 @@ import {
   RefreshCw, CheckCircle2, CircleDot, Tag, ShieldAlert
 } from 'lucide-react'
 import { useIssuesQuery, useRepositoriesQuery } from '@/hooks/useApi'
+import { useRepositoryContext } from '@/context/RepositoryContext'
 
 // Priority styling configuration
 const PRIORITY_CONFIG = {
@@ -26,13 +27,15 @@ function StatPill({ label, value, color = 'var(--text)' }: { label: string; valu
 }
 
 export default function Issues() {
-  const { data: issues = [], isLoading, isFetching, refetch, error } = useIssuesQuery()
-  const { data: repositories = [] } = useRepositoriesQuery()
-
+  const { selectedRepo, selectedRepoId: contextRepoId } = useRepositoryContext()
+  const [repoFilter, setRepoFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [stateFilter, setStateFilter] = useState<'all' | 'open' | 'closed'>('all')
   const [priorityFilter, setPriorityFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all')
-  const [repoFilter, setRepoFilter] = useState('all')
+
+  const effectiveRepoId = repoFilter !== 'all' ? repoFilter : (contextRepoId || undefined)
+  const { data: issues = [], isLoading, isFetching, refetch, error } = useIssuesQuery(effectiveRepoId)
+  const { data: repositories = [] } = useRepositoriesQuery()
 
   // Stats calculation
   const totalCount = issues.length

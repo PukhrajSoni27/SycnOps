@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { registerUser } from '../services/api'
+import { registerUser, establishUserSession } from '../services/api'
 import SocialAuthButtons from '../components/SocialAuthButtons'
 
 export default function Register() {
@@ -18,9 +18,7 @@ export default function Register() {
     try {
       const res = await registerUser({ name, email, password })
       if (res.token) {
-        localStorage.setItem('sycnops_token', res.token)
-        localStorage.setItem('sycnops_user', JSON.stringify(res.user))
-        window.dispatchEvent(new Event('sycnops_user_updated'))
+        establishUserSession(res.token, res.user)
         navigate('/dashboard')
       } else {
         setError(res.message || 'Could not create account.')
@@ -58,9 +56,7 @@ export default function Register() {
             onDone={() => setLoading(false)}
             onError={setError}
             onSuccess={(token, user) => {
-              localStorage.setItem('sycnops_token', token)
-              localStorage.setItem('sycnops_user', JSON.stringify(user))
-              window.dispatchEvent(new Event('sycnops_user_updated'))
+              establishUserSession(token, user)
               navigate('/dashboard')
             }}
           />

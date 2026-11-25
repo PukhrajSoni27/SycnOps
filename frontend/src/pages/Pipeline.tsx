@@ -3,10 +3,10 @@ import { Link, useSearchParams } from 'react-router-dom'
 import {
   Play, RefreshCw, CheckCircle2, XCircle, Clock,
   GitBranch, GitCommit, Terminal, Copy, Check, ChevronDown, ChevronUp,
-  Search, ShieldCheck, Sparkles, Box, Ban, Layers, Activity,
-  ArrowDown, FolderGit2, Code2, Cpu, FileSearch, ShieldAlert,
-  BarChart3, ArrowRight, ExternalLink, Filter, Loader2, Table as TableIcon, LayoutGrid,
-  FileText, Shield, AlertTriangle, Minus
+  Sparkles, Box, Ban, Layers, Activity,
+  ArrowDown, FolderGit2, Cpu, ShieldAlert,
+  BarChart3, ArrowRight, Loader2, Table as TableIcon, LayoutGrid,
+  FileText, Minus
 } from 'lucide-react'
 import {
   usePipelinesQuery,
@@ -16,7 +16,7 @@ import {
   useRepoAnalysisPipelineQuery,
   useRunRepoAnalysisPipelineMutation
 } from '@/hooks/useApi'
-import { PipelineRun, PipelineStage, AnalysisPipelineStage } from '@/services/api'
+import { useRepositoryContext } from '@/context/RepositoryContext'
 
 // Status badge styling config
 const STATUS_CONFIG: Record<string, { label: string; bg: string; color: string; border: string }> = {
@@ -170,6 +170,7 @@ function StageIcon({ status }: { status: string }) {
 }
 
 export default function Pipeline() {
+  const { selectedRepo, selectedRepoId: contextRepoId } = useRepositoryContext()
   const [searchParams] = useSearchParams()
   const queryRepoId = searchParams.get('repoId')
 
@@ -178,19 +179,21 @@ export default function Pipeline() {
 
   // Selected Repository for Analysis Pipeline
   const { data: repositories = [] } = useRepositoriesQuery()
-  const [selectedRepoId, setSelectedRepoId] = useState<string | number>(queryRepoId || '')
+  const [selectedRepoId, setSelectedRepoId] = useState<string | number>(contextRepoId || queryRepoId || '')
 
   // Sync selected repo
   useEffect(() => {
-    if (queryRepoId) {
+    if (contextRepoId) {
+      setSelectedRepoId(contextRepoId)
+    } else if (queryRepoId) {
       setSelectedRepoId(queryRepoId)
     } else if (repositories.length > 0 && !selectedRepoId) {
       setSelectedRepoId(repositories[0].id)
     }
-  }, [repositories, queryRepoId, selectedRepoId])
+  }, [contextRepoId, queryRepoId, repositories, selectedRepoId])
 
   // Repo Analysis Pipeline Query & Mutation
-  const { data: pipelineData, isLoading: isPipelineLoading, refetch: refetchRepoPipeline } = useRepoAnalysisPipelineQuery(selectedRepoId || undefined)
+  const { data: pipelineData, refetch: refetchRepoPipeline } = useRepoAnalysisPipelineQuery(selectedRepoId || undefined)
   const runPipelineMutation = useRunRepoAnalysisPipelineMutation()
 
   // Live simulation execution state
@@ -203,21 +206,28 @@ export default function Pipeline() {
 
   // CI/CD View States
   const [statusFilter, setStatusFilter] = useState<'all' | 'running' | 'success' | 'failed'>('all')
-  const [repoFilter, setRepoFilter] = useState('all')
-  const [envFilter, setEnvFilter] = useState('all')
-  const [search, setSearch] = useState('')
+  const [repoFilter, _setRepoFilter] = useState('all')
+  const [envFilter, _setEnvFilter] = useState('all')
+  const [search, _setSearch] = useState('')
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null)
   const [activeStageId, setActiveStageId] = useState<string | null>(null)
   const [copiedCommit, setCopiedCommit] = useState<string | null>(null)
   const [isTriggerModalOpen, setIsTriggerModalOpen] = useState(false)
 
   // Trigger modal state
-  const [triggerRepo, setTriggerRepo] = useState('campus-lost-found')
-  const [triggerBranch, setTriggerBranch] = useState('main')
+  const [triggerRepo, setTriggerRepo] = useState(selectedRepo?.name || '')
+  const [triggerBranch, setTriggerBranch] = useState(selectedRepo?.defaultBranch || 'main')
   const [triggerWorkflow, setTriggerWorkflow] = useState('production-ci')
   const [triggerEnv, setTriggerEnv] = useState('production')
 
-  const { data: pipelines = [], isLoading: isCicdLoading, refetch: refetchCicd, isFetching: isCicdFetching } = usePipelinesQuery()
+  useEffect(() => {
+    if (selectedRepo?.name && !triggerRepo) {
+      setTriggerRepo(selectedRepo.name)
+      if (selectedRepo.defaultBranch) setTriggerBranch(selectedRepo.defaultBranch)
+    }
+  }, [selectedRepo, triggerRepo])
+
+  const { data: pipelines = [], refetch: refetchCicd, isFetching: isCicdFetching } = usePipelinesQuery()
   const triggerMutation = useTriggerPipelineMutation()
   const cancelMutation = useCancelPipelineMutation()
 
@@ -272,7 +282,8 @@ export default function Pipeline() {
 
   const handleTriggerSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const targetRepo = triggerRepo || repositories[0]?.name || 'sycnops-core'
+    const targetRepo = triggerRepo || repositories[0]?.name || ''
+    if (!targetRepo) return
     await triggerMutation.mutateAsync({
       repo: targetRepo,
       branch: triggerBranch || 'main',
@@ -291,197 +302,23 @@ export default function Pipeline() {
   }
 
   // Active repo info
-  const currentRepo = repositories.find((r) => r.id === selectedRepoId || r.name === selectedRepoId) || repositories[0]
+  const currentRepo = repositories.find((r) => String(r.id) === String(selectedRepoId) || r.name === selectedRepoId) || repositories[0]
   const metrics = pipelineData?.metrics || {
-    totalFilesScanned: 144,
-    languagesDetected: 4,
-    functionsAnalyzed: 153,
-    dependenciesFound: 109,
-    securityIssues: 29,
-    pipelineDuration: '5.22s',
-    pipelineStatus: 'Completed',
+    totalFilesScanned: 0,
+    languagesDetected: 0,
+    functionsAnalyzed: 0,
+    dependenciesFound: 0,
+    securityIssues: 0,
+    pipelineDuration: '—',
+    pipelineStatus: currentRepo ? 'Pending' : 'No Repository',
   }
   const stages = pipelineData?.stages || []
 
-  const summaryTable = pipelineData?.summaryTable || [
-    {
-      category: 'Total No. of Files',
-      countQuantity: '144 files (source) (130 tracked in git)',
-      breakdown: [
-        '72 TSX ( .tsx ) UI components & pages',
-        '12 JSON configuration & data schema files',
-        '8 TypeScript ( .ts ) logic & utility files',
-        '5 Jupyter Notebooks ( .ipynb ) for ML modeling',
-        '5 CSV datasets ( .csv )',
-        '5 Markdown docs ( .md )',
-        '4 CSS stylesheets ( .css )',
-        '4 JavaScript files ( .js )',
-        '3 Python files ( .py )',
-        '3 PowerShell scripts ( .ps1 )',
-        '16 Images, binaries, templates, and models ( .png, .svg, .pkl, .db, .html )'
-      ]
-    },
-    {
-      category: 'Languages Used',
-      countQuantity: '4 core languages (+ data formats & shell)',
-      breakdown: [
-        'TypeScript / TSX: 80 files (~9,689 lines, 44.3% of codebase)',
-        'Python: 3 files + 5 notebooks (553 lines, FastAPI backend & ML models)',
-        'JavaScript / JSX: 6 files (202 lines, build configs & demo UI)',
-        'CSS / Tailwind: 4 stylesheets (601 lines)',
-        'JSON / CSV: 17 data files (10,722 lines + 1.37 MB tabular data)',
-        'PowerShell: 3 automation scripts (58 lines)'
-      ]
-    },
-    {
-      category: 'Functions Analyzed',
-      countQuantity: '153 functions (+ 6 Pydantic classes)',
-      breakdown: [
-        '131 Frontend TypeScript/React functions, hooks, and components (e.g., predictPrice, formatCurrency, ValuationResults, PropertyForm, InvestmentCalculator, useToast)',
-        '20 Python API endpoints & auth handlers in Backend/main.py (e.g., /predict, /auth/signup, /auth/login, /report, create_access_token, verify_password)',
-        '6 Pydantic data schemas ( RawRow, UserSignup, UserLogin, Token, ReportRequest, CreateApiKey )',
-        '2 Data engineering functions in notebooks ( fill_col, add_feature )'
-      ]
-    },
-    {
-      category: 'Dependencies Found',
-      countQuantity: '109 packages (across all manifests)',
-      breakdown: [
-        '53 Frontend Production packages ( react, react-dom, react-router-dom, @tanstack/react-query, Radix UI suite, leaflet, recharts, zod, tailwindcss )',
-        '19 Frontend Dev dependencies ( vite, typescript, eslint, @vitejs/plugin-react-swc, postcss )',
-        '37 Backend Python packages ( fastapi, uvicorn, pydantic, scikit-learn, xgboost, pandas, numpy, passlib[argon2], python-jose, reportlab, sqlite3 )'
-      ]
-    },
-    {
-      category: 'Issues Found',
-      countQuantity: '29 issues (24 CVEs + 5 architectural)',
-      breakdown: [
-        '17 High-Severity CVEs ( zod memory DoS, @remix-run/router open-redirect XSS, vite / launch-editor command bypasses )',
-        '7 Moderate / Low CVEs in npm packages',
-        'Hardcoded JWT secret key ( SECRET_KEY = "your-secret-key-here" ) in Backend/main.py',
-        'Plaintext password storage in browser localStorage in Login.tsx',
-        'Permissive CORS with credentials ( allow_origins=["*"] + allow_credentials=True )'
-      ]
-    }
-  ]
+  const summaryTable = pipelineData?.summaryTable || []
 
-  const componentBreakdown = pipelineData?.componentBreakdown || [
-    {
-      metric: 'Total Files',
-      frontend: '118 files (TSX, TS, CSS, assets, configs)',
-      backend: '26 files (Python, notebooks, CSVs, .pkl, .db)',
-      overall: '144 files'
-    },
-    {
-      metric: 'Primary Languages',
-      frontend: 'TypeScript (TSX/TS), JavaScript, CSS, HTML',
-      backend: 'Python, Jupyter Notebooks, CSV/JSON, PowerShell',
-      overall: '4 Languages (+ data/scripts)'
-    },
-    {
-      metric: 'Functions Analyzed',
-      frontend: '131 components, hooks, and helpers',
-      backend: '22 endpoints, auth helpers & notebook functions',
-      overall: '153 functions'
-    },
-    {
-      metric: 'Dependencies',
-      frontend: '72 npm packages (53 prod + 19 dev)',
-      backend: '37 pip packages (web, auth, ML, PDF)',
-      overall: '109 dependencies'
-    },
-    {
-      metric: 'Security Issues',
-      frontend: '24 npm CVEs + 1 plaintext password in localStorage',
-      backend: '4 code vulnerabilities (Hardcoded JWT key, CORS, pickle, API keys)',
-      overall: '29 issues'
-    }
-  ]
-
-  const securityVulnerabilities = pipelineData?.securityVulnerabilities || [
-    {
-      severity: 'Critical',
-      issueType: 'Hardcoded Secret',
-      description: 'Hardcoded JWT signing secret ( SECRET_KEY = "your-secret-key-here" )',
-      target: 'Backend/main.py#L59',
-      risk: 'Allows unauthorized attackers to forge valid admin/user authentication tokens.'
-    },
-    {
-      severity: 'Critical',
-      issueType: 'Credential Exposure',
-      description: 'Plaintext user accounts & passwords stored directly in browser localStorage',
-      target: 'Login.tsx#L58-L77',
-      risk: 'Any XSS exploit or malicious browser extension can exfiltrate all stored credentials.'
-    },
-    {
-      severity: 'High',
-      issueType: 'Insecure CORS',
-      description: 'allow_origins=["*"] configured alongside allow_credentials=True',
-      target: 'Backend/main.py#L46-L51',
-      risk: 'Violates CORS standard and allows any website to make authenticated requests.'
-    },
-    {
-      severity: 'High',
-      issueType: 'Insecure Deserialization',
-      description: 'Unvalidated pickle loading ( joblib.load(MODEL_PATH) )',
-      target: 'Backend/main.py#L36',
-      risk: 'Loading a modified .pkl file allows arbitrary remote Python code execution.'
-    },
-    {
-      severity: 'High',
-      issueType: 'Plaintext API Keys',
-      description: 'API keys stored unhashed in SQLite database',
-      target: 'Backend/main.py#L326-L329',
-      risk: 'Direct database access or backup leaks expose all active user API tokens.'
-    },
-    {
-      severity: 'High',
-      issueType: 'Package CVEs (17 High)',
-      description: 'zod (<4.6.6), @remix-run/router, vite, brace-expansion',
-      target: 'Real-estate-project-frontend/package.json',
-      risk: 'DoS via oversized schemas, Open Redirect XSS, and Windows CLI path traversal.'
-    },
-    {
-      severity: 'Medium',
-      issueType: 'Unprotected Endpoint',
-      description: '/predict_local lacks API key enforcement or rate limiting',
-      target: 'Backend/main.py#L229-L252',
-      risk: 'Allows resource exhaustion by scraping the ML model without an account.'
-    }
-  ]
-
-  const projectDependencies = pipelineData?.projectDependencies || [
-    {
-      ecosystem: 'Frontend',
-      scope: 'Production ( dependencies )',
-      packageCount: 53,
-      keyPackages: 'react (18.3.1), react-dom, react-router-dom (6.30.1), @radix-ui/* (18 modules), @tanstack/react-query, recharts, leaflet, react-leaflet, react-hook-form, zod, tailwindcss'
-    },
-    {
-      ecosystem: 'Frontend',
-      scope: 'Build & Dev ( devDependencies )',
-      packageCount: 19,
-      keyPackages: 'vite (5.4.19), @vitejs/plugin-react-swc, typescript (5.8.3), eslint (9.32.0), postcss, autoprefixer, rollup (4.53.2)'
-    },
-    {
-      ecosystem: 'Backend',
-      scope: 'Web Framework & Server',
-      packageCount: 5,
-      keyPackages: 'fastapi (0.116.2), uvicorn (0.35.0), starlette (0.48.0), pydantic (2.11.9), pydantic_core'
-    },
-    {
-      ecosystem: 'Backend',
-      scope: 'Auth, Security & PDF',
-      packageCount: 5,
-      keyPackages: 'passlib[argon2] (1.7.4), python-jose[cryptography] (3.3.0), python-multipart, reportlab (>=3.6.13)'
-    },
-    {
-      ecosystem: 'Backend',
-      scope: 'Machine Learning & Data',
-      packageCount: 8,
-      keyPackages: 'scikit-learn (1.7.2), xgboost (3.0.5), pandas (2.3.2), numpy (2.3.3), scipy (1.16.2), joblib (1.5.2), shap, sqlite3'
-    }
-  ]
+  const componentBreakdown = pipelineData?.componentBreakdown || []
+  const securityVulnerabilities = pipelineData?.securityVulnerabilities || []
+  const projectDependencies = pipelineData?.projectDependencies || []
 
   return (
     <div style={{ maxWidth: '1180px', margin: '0 auto', color: 'var(--text)' }}>
@@ -657,8 +494,8 @@ export default function Pipeline() {
                     </option>
                   ))
                 ) : (
-                  <option value="default" style={{ background: '#111' }}>
-                    studio/sycnops-core (main)
+                  <option value="" disabled style={{ background: '#111' }}>
+                    No repositories imported
                   </option>
                 )}
               </select>
@@ -1188,10 +1025,10 @@ export default function Pipeline() {
                       <tr style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'rgba(255,255,255,0.03)' }}>
                         <th style={{ padding: '14px 20px', width: '20%', fontWeight: 600, color: 'var(--text)' }}>Metric</th>
                         <th style={{ padding: '14px 20px', width: '30%', fontWeight: 600, color: '#38BDF8' }}>
-                          Frontend <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#E8D2B5', backgroundColor: 'rgba(89,9,7,0.4)', padding: '2px 6px', borderRadius: '4px', marginLeft: '6px' }}>( Real-estate-project-frontend )</span>
+                          Frontend
                         </th>
                         <th style={{ padding: '14px 20px', width: '30%', fontWeight: 600, color: '#A78BFA' }}>
-                          Backend &amp; ML <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#E8D2B5', backgroundColor: 'rgba(89,9,7,0.4)', padding: '2px 6px', borderRadius: '4px', marginLeft: '6px' }}>( Real-estate-project-backend )</span>
+                          Backend &amp; Services
                         </th>
                         <th style={{ padding: '14px 20px', width: '20%', fontWeight: 600, color: '#10B981' }}>Overall Total</th>
                       </tr>
@@ -1360,7 +1197,7 @@ export default function Pipeline() {
                 </span>
               </div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>
-                {pipelineData?.repository.url || currentRepo?.htmlUrl || `https://github.com/${currentRepo?.fullName || 'studio/sycnops-core'}`} •{' '}
+                {pipelineData?.repository.url || currentRepo?.htmlUrl || (currentRepo ? `https://github.com/${currentRepo.fullName || currentRepo.name}` : 'No repository connected')} •{' '}
                 <span style={{ color: '#E8D2B5' }}>branch: {pipelineData?.repository.branch || currentRepo?.defaultBranch || 'main'}</span> •{' '}
                 <span style={{ color: 'var(--text-muted)' }}>commit: {pipelineData?.repository.commit || 'a9f2e34'}</span>
               </div>
@@ -1815,7 +1652,7 @@ export default function Pipeline() {
                   type="text"
                   value={triggerRepo}
                   onChange={(e) => setTriggerRepo(e.target.value)}
-                  placeholder="e.g. campus-lost-found"
+                  placeholder="e.g. my-repository"
                   style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', color: 'var(--text)' }}
                 />
               </div>

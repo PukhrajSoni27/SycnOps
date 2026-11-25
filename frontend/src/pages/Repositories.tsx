@@ -8,6 +8,7 @@ import {
   useDeleteAllRepositoriesMutation
 } from '@/hooks/useApi'
 import { apiGet } from '@/services/api'
+import { useRepositoryContext } from '@/context/RepositoryContext'
 
 /**
  * Try to parse a GitHub identifier from:
@@ -33,6 +34,7 @@ function parseGitHubInput(input: string): { owner: string; repo: string } | null
 
 export default function Repositories() {
   const { data: repositories = [], isLoading } = useRepositoriesQuery()
+  const { selectedRepoId, setSelectedRepoId } = useRepositoryContext()
   const importMutation = useImportRepositoryMutation()
   const deleteMutation = useDeleteRepositoryMutation()
   const deleteAllMutation = useDeleteAllRepositoriesMutation()
@@ -78,12 +80,18 @@ export default function Repositories() {
           setVisibility(data.data.visibility)
         }
       } else {
-        setVisibility('private')
-        setPreviewError(data.message || "This repository is private. We can't access it.")
+        const msg = data.message || "Unable to inspect repository."
+        if (data.isPrivate || msg.toLowerCase().includes('private')) {
+          setVisibility('private')
+        }
+        setPreviewError(msg)
       }
     } catch (err: any) {
-      setVisibility('private')
-      setPreviewError(err.message || "This repository is private. We can't access it.")
+      const msg = err.message || "Unable to inspect repository."
+      if (msg.toLowerCase().includes('private')) {
+        setVisibility('private')
+      }
+      setPreviewError(msg)
     } finally {
       setPreviewLoading(false)
     }
@@ -122,8 +130,8 @@ export default function Repositories() {
       return
     }
 
-    if (isGitHubInput && previewError) {
-      setModalError(previewError)
+    if (isGitHubInput && visibility === 'private' && !githubToken.trim()) {
+      setModalError('This repository is private. Please provide a GitHub Personal Access Token (PAT) to authenticate.')
       return
     }
 
@@ -144,6 +152,7 @@ export default function Repositories() {
       )
 
       if (imported?.id) {
+        setSelectedRepoId(String(imported.id))
         setTimeout(() => {
           navigate(`/repositories/${imported.id}/analysis`)
         }, 1200)
@@ -153,7 +162,7 @@ export default function Repositories() {
         }, 1200)
       }
     } catch (err: any) {
-      setModalError(err.message || "This repository is private. We can't access it.")
+      setModalError(err.message || "Failed to import repository.")
     }
   }
 
@@ -546,21 +555,25 @@ export default function Repositories() {
                 <div style={{
                   fontFamily: 'var(--font-mono)',
                   fontSize: '12px',
-                  color: '#EF4444',
+                  color: previewError.toLowerCase().includes('rate limit') ? '#F59E0B' : '#EF4444',
                   padding: '14px 16px',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
-                  background: 'rgba(239, 68, 68, 0.08)',
+                  border: `1px solid ${previewError.toLowerCase().includes('rate limit') ? 'rgba(245, 158, 11, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                  background: previewError.toLowerCase().includes('rate limit') ? 'rgba(245, 158, 11, 0.08)' : 'rgba(239, 68, 68, 0.08)',
                   borderRadius: '10px',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '8px'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600 }}>
-                    <Lock size={15} color="#EF4444" />
+                    <Lock size={15} color={previewError.toLowerCase().includes('rate limit') ? '#F59E0B' : '#EF4444'} />
                     <span>{previewError}</span>
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                    This repository is private or inaccessible. We can't access it without authentication. If you own or have access to this repository, enter your GitHub Personal Access Token (PAT) below to authenticate.
+                    {previewError.toLowerCase().includes('rate limit')
+                      ? "GitHub's unauthenticated API limit (60 requests/hr) was reached on your IP. Enter a free GitHub Personal Access Token (PAT) below to get 5,000 req/hr, or wait until GitHub resets the limit."
+                      : previewError.toLowerCase().includes('bad credentials') || previewError.toLowerCase().includes('token is invalid')
+                        ? "The provided Personal Access Token was rejected. Check your token at GitHub -> Settings -> Developer settings -> Personal access tokens."
+                        : "This repository is private or inaccessible without authentication. If you own or have access to this repository, enter your GitHub Personal Access Token (PAT) below to authenticate."}
                   </div>
                 </div>
               )}
@@ -612,6 +625,25 @@ export default function Repositories() {
                     <span>⊙ {ghPreview.openIssues} issues</span>
                     <span>👁 {formatNumber(ghPreview.watchers)}</span>
                   </div>
+                  {ghPreview.rateLimited && (
+                    <div style={{
+                      marginTop: '8px',
+                      padding: '6px 10px',
+                      borderRadius: '6px',
+                      backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                      border: '1px solid rgba(245, 158, 11, 0.25)',
+                      fontSize: '11px',
+                      fontFamily: 'var(--font-mono)',
+                      color: '#F59E0B',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}>
+                      <span>⚡</span>
+                      <span>Verified Public Repository. GitHub API limit active; loaded using local intelligence.</span>
+                    </div>
+                  )}
+
                   {ghPreview.topics && ghPreview.topics.length > 0 && (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
                       {ghPreview.topics.slice(0, 6).map((topic: string) => (
@@ -665,7 +697,12 @@ export default function Repositories() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                     <button
                       type="button"
-                      onClick={() => setVisibility('public')}
+                      onClick={() => {
+                        setVisibility('public')
+                        if (previewError && previewError.toLowerCase().includes('private')) {
+                          setPreviewError('')
+                        }
+                      }}
                       style={{
                         display: 'flex',
                         alignItems: 'center',

@@ -1,7 +1,9 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { execSync } from 'child_process'
 import { runComprehensiveScan, isVendorOrBuildPath } from './securityScanner.js'
+import { detectRepositoryLanguages } from './codeQualityEngine.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '../..')
@@ -172,18 +174,206 @@ export function mapCommit(commit, repoFullName) {
   }
 }
 
+function hashString(str) {
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i)
+    hash |= 0
+  }
+  return Math.abs(hash) || Date.now()
+}
+
+/**
+ * Checks whether a repository is public on GitHub without relying on REST API rate limits.
+ * Uses a lightweight HEAD request to github.com and falls back to git ls-remote.
+ */
+export async function checkRepoPublic(owner, repo) {
+  if (!owner || !repo) return false
+  const cleanRepo = repo.replace(/\.git$/i, '')
+
+  // 1. Check with git ls-remote first (most reliable, does not consume GitHub REST API rate limits)
+  try {
+    const out = execSync(`git ls-remote --heads https://github.com/${owner}/${cleanRepo}.git`, {
+      timeout: 12000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      windowsHide: true
+    }).toString()
+    if (out && (out.includes('refs/heads/') || out.includes('HEAD'))) return true
+  } catch (_) {}
+
+  // 2. Fast HEAD/GET check to github.com web page
+  try {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 6000)
+    const res = await fetch(`https://github.com/${owner}/${cleanRepo}`, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+      },
+      redirect: 'manual',
+      signal: ctrl.signal
+    })
+    clearTimeout(timer)
+    if (res.status === 200) return true
+    if (res.status === 301 || res.status === 302) {
+      const loc = res.headers.get('location') || ''
+      if (!loc.includes('/login')) return true
+    }
+  } catch (_) {}
+
+  return false
+}
+
+/**
+ * Reads recent commits from local git history if available in .repos_cache.
+ */
+function readLocalGitCommits(cleanRepo, fullName) {
+  const reposCacheDir = path.resolve(__dirname, '../.repos_cache')
+  const localCandidates = [
+    path.resolve(reposCacheDir, cleanRepo),
+    path.resolve(reposCacheDir, cleanRepo.replace(/[\/\\]/g, '_'))
+  ]
+  let localDir = null
+  for (const c of localCandidates) {
+    if (fs.existsSync(c) && fs.statSync(c).isDirectory()) {
+      localDir = c
+      break
+    }
+  }
+  if (!localDir) return []
+
+  try {
+    const log = execSync('git log -n 10 --pretty=format:"%H|%s|%an|%ad" --date=iso', {
+      cwd: localDir,
+      timeout: 3000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      windowsHide: true
+    }).toString().trim()
+    if (!log) return []
+    return log.split('\n').filter(Boolean).map((line) => {
+      const [sha, msg, author, date] = line.split('|')
+      return {
+        id: sha?.substring(0, 7) || 'local',
+        fullSha: sha || '',
+        message: msg || 'Commit',
+        author: author || 'Developer',
+        time: timeAgo(date),
+        date: date || new Date().toISOString(),
+        repo: fullName
+      }
+    })
+  } catch (_) {
+    return []
+  }
+}
+
+/**
+ * Builds fallback metadata for a verified public repository when GitHub REST API rate limit is reached.
+ */
+function buildPublicFallbackMeta(owner, repo) {
+  const cleanRepo = repo.replace(/\.git$/i, '')
+  const reposCacheDir = path.resolve(__dirname, '../.repos_cache')
+  const localCandidates = [
+    path.resolve(reposCacheDir, cleanRepo),
+    path.resolve(reposCacheDir, `${owner}_${cleanRepo}`)
+  ]
+
+  let localDir = null
+  for (const c of localCandidates) {
+    if (fs.existsSync(c) && fs.statSync(c).isDirectory()) {
+      localDir = c
+      break
+    }
+  }
+
+  let description = `Public repository ${owner}/${cleanRepo}`
+  let language = 'TypeScript'
+  let defaultBranch = 'main'
+  let size = 1024
+
+  if (localDir) {
+    try {
+      const pkgPath = path.join(localDir, 'package.json')
+      if (fs.existsSync(pkgPath)) {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+        if (pkg.description) description = pkg.description
+      }
+      const detection = detectRepositoryLanguages(localDir)
+      if (detection.languages?.length) {
+        language = detection.languages[0]
+      }
+    } catch (_) {}
+
+    try {
+      const branch = execSync('git rev-parse --abbrev-ref HEAD', {
+        cwd: localDir,
+        timeout: 2000,
+        stdio: ['ignore', 'pipe', 'ignore'],
+        windowsHide: true
+      }).toString().trim()
+      if (branch && branch !== 'HEAD') defaultBranch = branch
+    } catch (_) {}
+  }
+
+  return {
+    id: Math.abs(hashString(`${owner}/${cleanRepo}`)),
+    name: cleanRepo,
+    full_name: `${owner}/${cleanRepo}`,
+    description,
+    language,
+    stargazers_count: 0,
+    forks_count: 0,
+    open_issues_count: 0,
+    visibility: 'public',
+    private: false,
+    default_branch: defaultBranch,
+    owner: {
+      login: owner,
+      avatar_url: `https://github.com/${owner}.png`
+    },
+    html_url: `https://github.com/${owner}/${cleanRepo}`,
+    topics: ['public', 'github'],
+    watchers_count: 0,
+    size,
+    updated_at: new Date().toISOString()
+  }
+}
+
 export async function fetchRepoBundle(owner, repo, customToken) {
-  const meta = await ghFetch(`/repos/${owner}/${repo}`, customToken)
-  const fullName = meta.full_name
+  const cleanRepo = repo.replace(/\.git$/i, '')
+  let meta = null
+  let rateLimited = false
+
+  try {
+    meta = await ghFetch(`/repos/${owner}/${cleanRepo}`, customToken)
+  } catch (err) {
+    // If GitHub API call fails (rate limit, network issue, or unauthenticated 404),
+    // verify whether this repository is actually publicly accessible on GitHub
+    const isPublic = await checkRepoPublic(owner, cleanRepo)
+    if (isPublic) {
+      rateLimited = true
+      meta = buildPublicFallbackMeta(owner, cleanRepo)
+    } else {
+      throw err
+    }
+  }
+
+  const fullName = meta.full_name || `${owner}/${cleanRepo}`
   const [issuesRaw, pullsRaw, commitsRaw] = await Promise.all([
-    ghFetch(`/repos/${owner}/${repo}/issues?state=open&per_page=50&sort=updated`, customToken).catch(() => []),
-    ghFetch(`/repos/${owner}/${repo}/pulls?state=open&per_page=50&sort=updated`, customToken).catch(() => []),
-    ghFetch(`/repos/${owner}/${repo}/commits?per_page=30`, customToken).catch(() => [])
+    ghFetch(`/repos/${owner}/${cleanRepo}/issues?state=open&per_page=50&sort=updated`, customToken).catch(() => []),
+    ghFetch(`/repos/${owner}/${cleanRepo}/pulls?state=open&per_page=50&sort=updated`, customToken).catch(() => []),
+    ghFetch(`/repos/${owner}/${cleanRepo}/commits?per_page=30`, customToken).catch(() => [])
   ])
   const issues = (Array.isArray(issuesRaw) ? issuesRaw : []).filter((i) => !i.pull_request).map((i) => mapIssue(i, fullName))
   const pulls = (Array.isArray(pullsRaw) ? pullsRaw : []).map((p) => mapPR(p, fullName))
-  const commits = (Array.isArray(commitsRaw) ? commitsRaw : []).map((c) => mapCommit(c, fullName))
-  return { meta, issues, pulls, commits }
+  let commits = (Array.isArray(commitsRaw) ? commitsRaw : []).map((c) => mapCommit(c, fullName))
+
+  if (commits.length === 0) {
+    commits = readLocalGitCommits(cleanRepo, fullName)
+  }
+
+  return { meta, issues, pulls, commits, rateLimited }
 }
 
 function hasLabel(issue, re) {
@@ -484,13 +674,32 @@ export async function fetchDetails(owner, name, repo, customToken) {
 
 // ── Repository Analysis Pipeline (7-stage Intelligence Flow) ─────────────
 export async function calculateRepositoryPipeline(repo, customToken) {
+  if (!repo) {
+    return {
+      repository: null,
+      metrics: {
+        totalFilesScanned: 0,
+        languagesDetected: 0,
+        functionsAnalyzed: 0,
+        dependenciesFound: 0,
+        securityIssues: 0,
+        pipelineDuration: '—',
+        pipelineStatus: 'No Repository'
+      },
+      stages: [],
+      summaryTable: [],
+      componentBreakdown: [],
+      securityVulnerabilities: [],
+      projectDependencies: []
+    }
+  }
   const startPerf = performance.now()
   const token = customToken || repo?.githubToken || process.env.GITHUB_TOKEN
 
   let commitSha = 'a9f2e34'
   let commitMsg = 'Initial commit'
   let defaultBranch = repo?.defaultBranch || 'main'
-  let repoUrl = repo?.htmlUrl || `https://github.com/${repo?.fullName || repo?.name || 'studio/sycnops-core'}`
+  let repoUrl = repo?.htmlUrl || (repo?.fullName ? `https://github.com/${repo.fullName}` : '')
   let testFilesCount = 0
 
   let scanResult = null
@@ -550,52 +759,55 @@ export async function calculateRepositoryPipeline(repo, customToken) {
   } else {
     // Local repository walk
     try {
+      const localRepoDir = (repo?.localPath && fs.existsSync(repo.localPath))
+        ? repo.localPath
+        : ((repo?.path && fs.existsSync(repo.path)) ? repo.path : rootDir)
       const localFiles = []
       function walkDir(dir) {
         for (const item of fs.readdirSync(dir)) {
-          if (['node_modules', '.git', 'dist', '.vscode', '.devin', '.venv', 'venv', 'site-packages'].includes(item)) continue
+          if (['node_modules', '.git', 'dist', 'build', '.vscode', '.devin', '.venv', 'venv', 'site-packages', '__pycache__'].includes(item)) continue
           const fullPath = path.join(dir, item)
-          const relPath = path.relative(rootDir, fullPath).replace(/\\/g, '/')
+          const relPath = path.relative(localRepoDir, fullPath).replace(/\\/g, '/')
           const st = fs.statSync(fullPath)
           if (st.isDirectory()) walkDir(fullPath)
           else localFiles.push({ path: relPath, size: st.size })
         }
       }
-      walkDir(rootDir)
+      walkDir(localRepoDir)
       testFilesCount = localFiles.filter((f) => /(?:test|spec)\./i.test(f.path)).length
 
       scanResult = await runComprehensiveScan({
-        owner: 'studio',
-        name: repo?.name || 'sycnops-core',
-        fullName: repo?.fullName || 'studio/sycnops-core',
-        defaultBranch: 'main',
+        owner: repo?.owner || 'workspace',
+        name: repo?.name || 'repository',
+        fullName: repo?.fullName || repo?.name || 'repository',
+        defaultBranch: repo?.defaultBranch || 'main',
         allBlobs: localFiles.map((f) => ({ path: f.path, type: 'blob', size: f.size })),
         fetchFileContent: async (p) => {
           try {
-            const fullPath = path.join(rootDir, p)
+            const fullPath = path.join(localRepoDir, p)
             if (fs.existsSync(fullPath)) return fs.readFileSync(fullPath, 'utf8')
           } catch {}
           return null
         },
-        commits: [],
-        repoMeta: { name: repo?.name || 'sycnops-core' }
+        commits: repo?.commits || [],
+        repoMeta: { name: repo?.name || 'repository' }
       })
-      commitSha = 'c7a2e89'
-      commitMsg = 'feat(pipeline): real-time repository intelligence and AST analysis'
+      commitSha = repo?.commits?.[0]?.id?.slice(0, 7) || 'HEAD'
+      commitMsg = repo?.commits?.[0]?.message || 'Local repository snapshot'
     } catch (e) {
       console.warn('Local scan error:', e.message)
     }
   }
 
   // Extract clean metrics
-  const filesCount = scanResult?.metrics?.totalFilesScanned || 248
-  const languagesDetected = scanResult?.coreLanguages || ['TypeScript', 'JavaScript', 'HTML', 'CSS']
-  const functionsCount = scanResult?.metrics?.functionsAnalyzed || 386
-  const dependenciesCount = scanResult?.metrics?.dependenciesFound || 32
+  const filesCount = scanResult?.metrics?.totalFilesScanned || 0
+  const languagesDetected = scanResult?.coreLanguages || (repo?.language ? [repo.language] : [])
+  const functionsCount = scanResult?.metrics?.functionsAnalyzed || 0
+  const dependenciesCount = scanResult?.metrics?.dependenciesFound || 0
   const securityIssues = scanResult?.metrics?.securityIssues || 0
   const architecturePattern = scanResult?.architecturePattern || 'Modular Architecture'
   const layerSummary = scanResult?.layerSummary || 'Presentation Layer -> Service Layer -> Data Layer'
-  const sampleSymbols = scanResult?.extractedSymbols?.length ? scanResult.extractedSymbols : ['parseGitHubRepo', 'calculateRepositoryPipeline']
+  const sampleSymbols = scanResult?.extractedSymbols?.length ? scanResult.extractedSymbols : []
   const summaryTable = scanResult?.summaryTable || []
   const componentBreakdown = scanResult?.componentBreakdown || []
   const securityVulnerabilities = scanResult?.securityVulnerabilities || []
@@ -622,7 +834,7 @@ export async function calculateRepositoryPipeline(repo, customToken) {
       status: 'completed',
       duration: dClone,
       logs: [
-        `Connecting to remote repository: ${repo?.fullName || 'studio/sycnops-core'}`,
+        `Connecting to remote repository: ${repo?.fullName || repo?.name || 'repository'}`,
         `Target branch: refs/heads/${defaultBranch} • HEAD commit: ${commitSha}`,
         `Commit message: "${commitMsg}"`,
         `Filtered vendor, build, and virtual environment directories (.venv, node_modules, dist)`,
@@ -750,9 +962,9 @@ export async function calculateRepositoryPipeline(repo, customToken) {
 
   return {
     repository: {
-      id: repo?.id || 1,
-      name: repo?.name || 'sycnops-core',
-      fullName: repo?.fullName || 'studio/sycnops-core',
+      id: repo?.id || '',
+      name: repo?.name || 'repository',
+      fullName: repo?.fullName || repo?.name || 'repository',
       url: repoUrl,
       branch: defaultBranch,
       commit: commitSha,

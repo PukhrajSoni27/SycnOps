@@ -5,15 +5,16 @@ import {
   Plus, BarChart3, Star, GitFork, ExternalLink, ShieldCheck,
   Sparkles, Layers, Activity, Workflow
 } from 'lucide-react'
-import { fetchDashboard } from '@/services/api'
-import { useRepositoriesQuery, usePullRequestsQuery, useIssuesQuery, useAnalyticsQuery } from '@/hooks/useApi'
+import { useRepositoriesQuery, usePullRequestsQuery, useIssuesQuery, useAnalyticsQuery, useDashboardQuery } from '@/hooks/useApi'
+import { useRepositoryContext } from '@/context/RepositoryContext'
 
 export default function Dashboard() {
-  const { data: dash, isLoading: dashLoading } = useQuery({ queryKey: ['dashboard'], queryFn: fetchDashboard })
+  const { selectedRepo, selectedRepoId } = useRepositoryContext()
+  const { data: dash } = useDashboardQuery(selectedRepoId || undefined)
   const { data: repositories = [], isLoading: reposLoading } = useRepositoriesQuery()
-  const { data: pullRequests = [], isLoading: prsLoading } = usePullRequestsQuery()
-  const { data: issues = [], isLoading: issuesLoading } = useIssuesQuery()
-  const { data: analytics, isLoading: analyticsLoading } = useAnalyticsQuery()
+  const { data: pullRequests = [], isLoading: prsLoading } = usePullRequestsQuery(selectedRepoId || undefined)
+  const { data: issues = [], isLoading: issuesLoading } = useIssuesQuery(selectedRepoId || undefined)
+  const { data: analytics, isLoading: analyticsLoading } = useAnalyticsQuery(selectedRepoId || undefined)
 
   const commits = dash?.recentCommits || []
   const openPRs = pullRequests.filter(p => p.status === 'open')

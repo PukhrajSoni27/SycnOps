@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ReactFlow,
@@ -24,32 +24,16 @@ import {
   ChevronRight,
   ChevronDown,
   Search,
-  Layers,
   ArrowRight,
   ExternalLink,
-  Boxes,
   Compass,
-  Cpu,
-  Server,
-  Database,
-  ShieldCheck,
-  Zap,
-  Info,
-  Filter,
   RefreshCw,
   GitBranch,
-  FileText,
   AlertTriangle,
   ZoomIn,
   ZoomOut,
   Maximize2,
-  RotateCcw,
   Network,
-  Share2,
-  Terminal,
-  Activity,
-  Code2,
-  Box,
   Copy,
   Check,
   X
@@ -57,10 +41,10 @@ import {
 import {
   useRepositoriesQuery,
   useTopologyQuery,
-  useTopologyFileQuery,
   useRescanTopologyMutation
 } from '@/hooks/useApi'
-import { TopologyTreeNode, TopologyData } from '@/services/api'
+import { useRepositoryContext } from '@/context/RepositoryContext'
+import { TopologyTreeNode } from '@/services/api'
 
 // ── Category Color Tokens (Monochrome / Accent Palette) ────────────────────────
 const CATEGORY_META: Record<string, { label: string; color: string; bg: string; border: string }> = {
@@ -208,8 +192,8 @@ const FileTopologyNodeComponent = React.memo(({ data, selected }: NodeProps) => 
       >
         <span>{data.linesCount ? `${data.linesCount} lines` : `${Math.round(((data.sizeBytes as number) || 0) / 1024)} KB`}</span>
         <div style={{ display: 'flex', gap: 6, fontSize: '9px' }}>
-          <span title="Outgoing dependencies (imports)">↑ {data.outDegree || (data.imports as string[])?.length || 0}</span>
-          <span title="Incoming dependencies (imported by)">↓ {data.inDegree || 0}</span>
+          <span title="Outgoing dependencies (imports)">↑ {String(data.outDegree ?? (data.imports as string[])?.length ?? 0)}</span>
+          <span title="Incoming dependencies (imported by)">↓ {String(data.inDegree ?? 0)}</span>
         </div>
       </div>
 
@@ -423,25 +407,19 @@ function DependencyGraphCanvas({
 
 // ── Main File Topology Page Component ──────────────────────────────────────────
 export default function FileTopology() {
-  const { data: reposData, isLoading: isReposLoading } = useRepositoriesQuery()
-  const repositories = useMemo(() => reposData?.data || [], [reposData])
+  const { data: repositories = [], isLoading: _isReposLoading } = useRepositoriesQuery()
+
+  const { selectedRepoId, setSelectedRepoId } = useRepositoryContext()
 
   // Active selected project / repository ID
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('sycnops')
+  const selectedProjectId = selectedRepoId || (repositories[0] ? String(repositories[0].id) : '')
   const [viewMode, setViewMode] = useState<'tree' | 'graph'>('tree')
   const [searchQuery, setSearchQuery] = useState('')
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>('all')
-  const [activeLanguageFilter, setActiveLanguageFilter] = useState<string>('all')
-  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(['frontend', 'frontend/src', 'backend', 'backend/lib']))
+  const [activeLanguageFilter, _setActiveLanguageFilter] = useState<string>('all')
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(['frontend', 'frontend/src', 'backend', 'backend/lib', 'src']))
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [copySuccess, setCopySuccess] = useState(false)
-
-  // Auto-select first real imported repository if available
-  useEffect(() => {
-    if (repositories.length > 0 && selectedProjectId === 'sycnops') {
-      setSelectedProjectId(String(repositories[0].id || repositories[0].name))
-    }
-  }, [repositories])
 
   // Fetch real topology from FastAPI / Backend
   const {
@@ -464,7 +442,7 @@ export default function FileTopology() {
   }
 
   // Active repository object
-  const activeRepo = useMemo(() => {
+  const _activeRepo = useMemo(() => {
     return repositories.find(
       (r) => String(r.id) === selectedProjectId || r.name === selectedProjectId || r.fullName === selectedProjectId
     ) || null
@@ -537,7 +515,7 @@ export default function FileTopology() {
   }
 
   // Recursive Tree Node Renderer
-  const renderTreeNode = (node: TopologyTreeNode, depth = 0) => {
+  const renderTreeNode = (node: TopologyTreeNode, depth = 0): React.ReactNode => {
     if (node.id === 'root') {
       return (node.children || []).map((child) => renderTreeNode(child, 0))
     }
@@ -640,6 +618,38 @@ export default function FileTopology() {
     )
   }
 
+  if (!selectedProjectId) {
+    return (
+      <div style={{ padding: '80px 20px', textAlign: 'center', maxWidth: 600, margin: '0 auto' }}>
+        <FolderTree size={44} color="#34D399" style={{ margin: '0 auto 16px', display: 'block' }} />
+        <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '28px', color: '#F4F4F5', marginBottom: 8 }}>
+          No Repository Selected
+        </h2>
+        <p style={{ fontFamily: 'var(--font-sans)', fontSize: '14px', color: '#A1A1AA', lineHeight: 1.6, marginBottom: 20 }}>
+          Import a GitHub repository in Repositories or select one from the header switcher to inspect its file topology.
+        </p>
+        <Link
+          to="/repositories"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '10px 20px',
+            borderRadius: 10,
+            backgroundColor: '#10B981',
+            color: '#050505',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '12px',
+            fontWeight: 600,
+            textDecoration: 'none'
+          }}
+        >
+          Go to Repositories
+        </Link>
+      </div>
+    )
+  }
+
   return (
     <div className="s-page" style={{ position: 'relative', minHeight: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* ── Top Bar: Header, Repo Selector, Rescan & View Mode ── */}
@@ -707,7 +717,7 @@ export default function FileTopology() {
             <select
               value={selectedProjectId}
               onChange={(e) => {
-                setSelectedProjectId(e.target.value)
+                setSelectedRepoId(e.target.value)
                 setSelectedPath(null)
               }}
               style={{
@@ -725,9 +735,6 @@ export default function FileTopology() {
                   {repo.fullName || repo.name}
                 </option>
               ))}
-              <option value="sycnops" style={{ backgroundColor: '#18181B', color: '#FFF' }}>
-                SycnOps Platform (Local Workspace)
-              </option>
             </select>
           </div>
 

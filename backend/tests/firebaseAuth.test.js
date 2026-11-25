@@ -1,8 +1,22 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import http from 'http'
+import { app, server } from '../index.js'
 import { initFirebase, verifyFirebaseIdToken, isAuthConnected } from '../config/firebase.js'
 
 test('Firebase Admin initialization & authentication security suite', async (t) => {
+  const testServer = http.createServer(app)
+  await new Promise((res) => testServer.listen(0, '127.0.0.1', res))
+  const port = testServer.address().port
+  const baseUrl = `http://127.0.0.1:${port}`
+
+  t.after(() => {
+    testServer.close()
+    if (server && server.listening) {
+      server.close()
+    }
+  })
+
   await t.test('1. Firebase Admin initializes and supports token verification with projectId', () => {
     initFirebase()
     assert.equal(isAuthConnected(), true, 'Firebase Auth Admin instance should be connected')
@@ -43,7 +57,7 @@ test('Firebase Admin initialization & authentication security suite', async (t) 
 
   await t.test('4. Social auth endpoint rejects requests without an idToken (spoofed identity attack)', async () => {
     try {
-      const res = await fetch('http://127.0.0.1:5000/api/auth/social', {
+      const res = await fetch(`${baseUrl}/api/auth/social`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -68,7 +82,7 @@ test('Firebase Admin initialization & authentication security suite', async (t) 
 
   await t.test('5. Social auth endpoint rejects invalid or forged Firebase ID tokens with HTTP 401', async () => {
     try {
-      const res = await fetch('http://127.0.0.1:5000/api/auth/social', {
+      const res = await fetch(`${baseUrl}/api/auth/social`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -92,7 +106,7 @@ test('Firebase Admin initialization & authentication security suite', async (t) 
 
   await t.test('6. Social auth endpoint rejects invalid provider specification with HTTP 400', async () => {
     try {
-      const res = await fetch('http://127.0.0.1:5000/api/auth/social', {
+      const res = await fetch(`${baseUrl}/api/auth/social`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -155,7 +169,7 @@ test('Firebase Admin initialization & authentication security suite', async (t) 
       assert.match(dataGithub.message, /id token/i)
 
       // Test google provider with missing token -> should validate provider but reject on missing token
-      const resGoogle = await fetch('http://127.0.0.1:5000/api/auth/social', {
+      const resGoogle = await fetch(`${baseUrl}/api/auth/social`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider: 'google' })
@@ -174,7 +188,7 @@ test('Firebase Admin initialization & authentication security suite', async (t) 
 
   await t.test('10. Verified token exchange requirement: unverified or forged GitHub tokens return 401', async () => {
     try {
-      const res = await fetch('http://127.0.0.1:5000/api/auth/social', {
+      const res = await fetch(`${baseUrl}/api/auth/social`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

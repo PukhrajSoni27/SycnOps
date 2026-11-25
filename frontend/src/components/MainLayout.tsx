@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { Menu, X } from 'lucide-react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Menu, X, GitBranch, FolderGit2 } from 'lucide-react'
+import { useRepositoryContext } from '@/context/RepositoryContext'
 
 interface NavItem {
   name: string
@@ -28,6 +29,8 @@ interface MainLayoutProps {
 export default function MainLayout({ children }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const location = useLocation()
+  const navigate = useNavigate()
+  const { selectedRepo, selectedRepoId, setSelectedRepoId, repositories } = useRepositoryContext()
 
 
   const getUserDisplayName = (): string => {
@@ -241,8 +244,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
       <main className="s-main">
         
         {/* Topbar */}
-        <header className="s-topbar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <header className="s-topbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             <button className="md:hidden" onClick={() => setSidebarOpen(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--text)' }}>
               <Menu size={22} />
             </button>
@@ -253,6 +256,71 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 Studio Instance — Active
               </span>
             </span>
+
+            {/* Universal Repository Selector */}
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              backgroundColor: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              padding: '4px 10px',
+              maxWidth: '360px'
+            }}>
+              <FolderGit2 size={13} color="#10B981" />
+              <select
+                value={selectedRepoId || ''}
+                onChange={(e) => {
+                  if (e.target.value === '__manage__') {
+                    navigate('/repositories')
+                  } else {
+                    setSelectedRepoId(e.target.value)
+                  }
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  outline: 'none',
+                  maxWidth: '240px'
+                }}
+              >
+                {repositories.length === 0 ? (
+                  <option value="" style={{ backgroundColor: '#18181B', color: '#888' }}>
+                    No Repositories Imported
+                  </option>
+                ) : (
+                  repositories.map((r) => (
+                    <option key={r.id} value={String(r.id)} style={{ backgroundColor: '#18181B', color: '#FFF' }}>
+                      {r.fullName || r.name} {r.language ? `(${r.language})` : ''}
+                    </option>
+                  ))
+                )}
+                <option value="__manage__" style={{ backgroundColor: '#27272A', color: '#10B981' }}>
+                  + Import / Manage Repositories...
+                </option>
+              </select>
+              {selectedRepo?.defaultBranch && (
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '10px',
+                  color: 'var(--text-dim)',
+                  borderLeft: '1px solid var(--border)',
+                  paddingLeft: '8px'
+                }}>
+                  <GitBranch size={10} />
+                  {selectedRepo.defaultBranch}
+                </span>
+              )}
+            </div>
           </div>
 
           <Link to="/profile" style={{ display: 'flex', alignItems: 'center', gap: '16px', textDecoration: 'none' }}>

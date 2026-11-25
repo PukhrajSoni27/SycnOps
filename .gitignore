@@ -39,8 +39,16 @@ serviceAccountKey.json
 # Workspace Cache
 .workspace_cache.json
 backend/.workspace_cache.json
+.users_cache.json
+backend/.users_cache.json
+.pull_requests_cache.json
+backend/.pull_requests_cache.json
 .topology_cache.json
 backend/.topology_cache.json
+.code_quality_cache.json
+backend/.code_quality_cache.json
+.ai_history_cache.json
+backend/.ai_history_cache.json
 .repos_cache/
 backend/.repos_cache/
 
@@ -53,3 +61,9 @@ backend/.repos_cache/
 *.njsproj
 *.sln
 *.sw?
+
+# AI Fix Assistant Patches & Backups
+.patch_backups/
+backend/.patch_backups/
+.ai_patches_cache.json
+backend/.ai_patches_cache.json

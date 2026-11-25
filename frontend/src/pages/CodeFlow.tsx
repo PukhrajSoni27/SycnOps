@@ -1,18 +1,18 @@
 import { useState, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
-  Workflow, GitBranch, ArrowDown, Activity, Code2, Server, Database, Globe,
-  ShieldCheck, Terminal, Copy, Check, ExternalLink, Play, ChevronRight,
-  Layers, AlertTriangle, ArrowRight, CheckCircle2, FileCode2, Sparkles,
-  Info, Cpu, Filter, Eye
+  Workflow, ArrowDown, Activity, Code2,
+  Copy, Check, Play,
+  Layers, AlertTriangle, FileCode2, Sparkles,
+  Filter, Eye
 } from 'lucide-react'
 import {
   useCodeFlowOperationsQuery,
   useCodeFlowTraceQuery,
-  useAnalyzeFileASTMutation,
-  useRepositoriesQuery
+  useAnalyzeFileASTMutation
 } from '@/hooks/useApi'
 import { CodeFlowNode } from '@/services/api'
+import { useRepositoryContext } from '@/context/RepositoryContext'
 
 // Fallback operation data matching Campus Lost & Found Registry if server query is pending
 const DEFAULT_OPERATION_FALLBACK = {
@@ -340,8 +340,11 @@ function logAnalyticsEvent(eventName, payload) {
 `
 
 export default function CodeFlow() {
+  const { selectedRepo, selectedRepoId } = useRepositoryContext()
+  const repoId = selectedRepoId || (selectedRepo?.id ? String(selectedRepo.id) : undefined)
+
   const [searchParams, setSearchParams] = useSearchParams()
-  const initialOp = searchParams.get('op') || 'report-lost-item'
+  const initialOp = searchParams.get('op') || ''
 
   const [selectedOperationId, setSelectedOperationId] = useState(initialOp)
   const [activeTab, setActiveTab] = useState<'flowchart' | 'ast-analyzer' | 'call-hierarchy'>('flowchart')
@@ -351,21 +354,36 @@ export default function CodeFlow() {
   const [customCodeInput, setCustomCodeInput] = useState(SAMPLE_CUSTOM_CODE)
   const [astAnalysisResult, setAstAnalysisResult] = useState<any>(null)
 
-  // API Queries
-  const { data: operationsList = [] } = useCodeFlowOperationsQuery()
-  const { data: traceData, isLoading: isTraceLoading } = useCodeFlowTraceQuery(selectedOperationId)
+  // API Queries for current repo
+  const { data: operationsList = [], isLoading: isOpsLoading } = useCodeFlowOperationsQuery(repoId)
+
+  // Automatically select first available operation for the repo
+  useEffect(() => {
+    if (operationsList.length > 0) {
+      if (!selectedOperationId || !operationsList.some(op => op.id === selectedOperationId)) {
+        setSelectedOperationId(operationsList[0].id)
+      }
+    }
+  }, [operationsList, selectedOperationId])
+
+  const { data: traceData, isLoading: _isTraceLoading } = useCodeFlowTraceQuery(selectedOperationId, repoId)
   const analyzeASTMutation = useAnalyzeFileASTMutation()
 
-  const currentOperation = traceData || DEFAULT_OPERATION_FALLBACK
-  const nodes = currentOperation.nodes || []
-  const [selectedNode, setSelectedNode] = useState<CodeFlowNode>(nodes[0] || DEFAULT_OPERATION_FALLBACK.nodes[0])
+  const hasRepoAndOps = Boolean(repoId) && operationsList.length > 0
+  const currentOperation = hasRepoAndOps
+    ? (traceData || operationsList.find(op => op.id === selectedOperationId) || operationsList[0])
+    : null
+  const nodes = currentOperation?.nodes || []
+  const [selectedNode, setSelectedNode] = useState<CodeFlowNode | null>(nodes[0] || null)
 
   // Sync selected node when operation changes
   useEffect(() => {
     if (nodes.length > 0) {
       setSelectedNode(nodes[0])
+    } else {
+      setSelectedNode(null)
     }
-  }, [selectedOperationId, traceData])
+  }, [selectedOperationId, traceData, repoId, operationsList.length])
 
   const handleCopySnippet = (snippet: string) => {
     navigator.clipboard.writeText(snippet)
@@ -472,9 +490,21 @@ export default function CodeFlow() {
                 boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
               }}
             >
-              <option value="report-lost-item">Campus Lost & Found: Report Lost Item</option>
-              <option value="claim-lost-item">Campus Lost & Found: Claim Lost Item</option>
-              <option value="trigger-pipeline">SycnOps: Trigger Multi-Stage CI/CD Pipeline</option>
+              {operationsList.length > 0 ? (
+                operationsList.map((op: any) => (
+                  <option key={op.id} value={op.id}>
+                    {op.repository ? `${op.repository}: ` : ''}{op.title}
+                  </option>
+                ))
+              ) : (
+                <option value="">
+                  {!repoId
+                    ? 'No repository connected'
+                    : isOpsLoading
+                      ? 'Scanning repository operations...'
+                      : 'No execution flows detected'}
+                </option>
+              )}
             </select>
           </div>
 
@@ -501,48 +531,93 @@ export default function CodeFlow() {
       </div>
 
       {/* ── Operation Header Banner ── */}
-      <div
-        style={{
-          ...cardStyle,
-          padding: '20px 24px',
-          marginBottom: '28px',
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 16,
-          background: 'linear-gradient(135deg, rgba(89,9,7,0.35), rgba(20,24,23,0.8))',
-          border: '1px solid rgba(232,210,181,0.25)'
-        }}
-      >
-        <div style={{ maxWidth: '780px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-            <span style={{ fontFamily: 'var(--font-serif)', fontSize: '20px', color: '#E8D2B5', fontWeight: 500 }}>
-              {currentOperation.title}
-            </span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', padding: '2px 8px', borderRadius: '4px', background: 'rgba(0,0,0,0.4)', color: '#38BDF8', border: '1px solid rgba(56,189,248,0.2)' }}>
-              {currentOperation.repository}
-            </span>
-            <span style={{ fontFamily: 'var(--font-tech)', fontSize: '11px', padding: '2px 8px', borderRadius: '4px', background: 'rgba(16,185,129,0.1)', color: '#10B981' }}>
-              {nodes.length} Execution Steps
-            </span>
-          </div>
-          <p style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 }}>
-            {currentOperation.description}
+      {!currentOperation ? (
+        <div
+          style={{
+            ...cardStyle,
+            padding: '48px 24px',
+            marginBottom: '28px',
+            textAlign: 'center',
+            background: 'linear-gradient(135deg, rgba(20,24,23,0.9), rgba(14,17,16,0.9))',
+            border: '1px solid var(--border)'
+          }}
+        >
+          <Workflow size={34} color="var(--text-dim)" style={{ margin: '0 auto 14px' }} />
+          <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '22px', color: 'var(--text)', margin: '0 0 8px 0' }}>
+            {!repoId ? 'No Repository Selected' : isOpsLoading ? 'Analyzing Repository Code Flow...' : 'No Execution Flows Detected'}
+          </h3>
+          <p style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', color: 'var(--text-muted)', margin: '0 auto 20px', maxWidth: '520px' }}>
+            {!repoId
+              ? 'Import a GitHub repository in Repositories to trace end-to-end functions, API routes, and database calls.'
+              : isOpsLoading
+                ? 'Parsing source files and call chains for the active repository.'
+                : 'No HTTP endpoints or traceable call sequences were extracted from this repository.'}
           </p>
+          {!repoId && (
+            <Link
+              to="/repositories"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '9px 18px',
+                borderRadius: '8px',
+                backgroundColor: 'var(--emerald)',
+                color: '#050505',
+                fontFamily: 'var(--font-tech)',
+                fontSize: '12px',
+                fontWeight: 600,
+                textDecoration: 'none'
+              }}
+            >
+              Go to Repositories
+            </Link>
+          )}
         </div>
+      ) : (
+        <div
+          style={{
+            ...cardStyle,
+            padding: '20px 24px',
+            marginBottom: '28px',
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 16,
+            background: 'linear-gradient(135deg, rgba(89,9,7,0.35), rgba(20,24,23,0.8))',
+            border: '1px solid rgba(232,210,181,0.25)'
+          }}
+        >
+          <div style={{ maxWidth: '780px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+              <span style={{ fontFamily: 'var(--font-serif)', fontSize: '20px', color: '#E8D2B5', fontWeight: 500 }}>
+                {currentOperation.title}
+              </span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', padding: '2px 8px', borderRadius: '4px', background: 'rgba(0,0,0,0.4)', color: '#38BDF8', border: '1px solid rgba(56,189,248,0.2)' }}>
+                {currentOperation.repository}
+              </span>
+              <span style={{ fontFamily: 'var(--font-tech)', fontSize: '11px', padding: '2px 8px', borderRadius: '4px', background: 'rgba(16,185,129,0.1)', color: '#10B981' }}>
+                {nodes.length} Execution Steps
+              </span>
+            </div>
+            <p style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 }}>
+              {currentOperation.description}
+            </p>
+          </div>
 
-        <div style={{ display: 'flex', gap: 20, fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
-          <div>
-            <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '10px' }}>API ROUTE</span>
-            <span style={{ color: '#A855F7', fontWeight: 600 }}>{currentOperation.apiEndpoint}</span>
-          </div>
-          <div>
-            <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '10px' }}>DATABASE OPERATION</span>
-            <span style={{ color: '#EF4444', fontWeight: 600 }}>{currentOperation.databaseOperation}</span>
+          <div style={{ display: 'flex', gap: 20, fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
+            <div>
+              <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '10px' }}>API ROUTE</span>
+              <span style={{ color: '#A855F7', fontWeight: 600 }}>{currentOperation.apiEndpoint}</span>
+            </div>
+            <div>
+              <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '10px' }}>DATABASE OPERATION</span>
+              <span style={{ color: '#EF4444', fontWeight: 600 }}>{currentOperation.databaseOperation}</span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* ── Tab Switcher ── */}
       <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border)', paddingBottom: '16px', marginBottom: '28px' }}>
@@ -583,11 +658,11 @@ export default function CodeFlow() {
       {/* ═════════════════════════════════════════════════════════════════════ */}
       {/* ── TAB 1: INTERACTIVE FLOWCHART & INSPECTOR (Matching Image) ── */}
       {/* ═════════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'flowchart' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(340px, 1.15fr) minmax(420px, 1.85fr)', gap: '28px', alignItems: 'start' }}>
+      {activeTab === 'flowchart' && currentOperation && selectedNode && (
+        <div className="s-codeflow-grid">
           
           {/* Left Column: Visual Step-by-Step Flowchart */}
-          <div style={{ ...cardStyle, padding: '24px' }}>
+          <div className="s-codeflow-left" style={{ ...cardStyle, padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div>
                 <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '18px', color: 'var(--text)', margin: '0 0 2px 0' }}>
@@ -879,7 +954,7 @@ export default function CodeFlow() {
       {/* ═════════════════════════════════════════════════════════════════════ */}
       {/* ── TAB 2: FUNCTION CALL HIERARCHY (AST Map) ── */}
       {/* ═════════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'call-hierarchy' && (
+      {activeTab === 'call-hierarchy' && currentOperation && (
         <div style={{ ...cardStyle, padding: '28px' }}>
           <div style={{ marginBottom: 24 }}>
             <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '20px', color: 'var(--text)', margin: '0 0 6px 0' }}>

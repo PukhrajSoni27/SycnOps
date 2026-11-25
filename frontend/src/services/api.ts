@@ -1,3 +1,5 @@
+import { queryClient } from '../lib/queryClient'
+
 const BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
 export interface Repository {
@@ -23,7 +25,7 @@ export interface Repository {
 }
 
 export interface PullRequest {
-  id: number
+  id: number | string
   title: string
   repo: string
   author: string
@@ -35,6 +37,17 @@ export interface PullRequest {
   draft?: boolean
   head?: string
   base?: string
+  aiFix?: boolean
+  prId?: string
+  patchIds?: string[]
+  validationSummary?: {
+    scannersExecuted?: string[]
+    resolvedCount?: number
+    remainingCount?: number
+    newlyIntroducedCount?: number
+    testsExecuted?: boolean
+    testsPassed?: boolean | null
+  }
 }
 
 export interface Issue {
@@ -43,6 +56,8 @@ export interface Issue {
   repo: string
   priority: string
   label: string
+  labels?: string[]
+  createdAt?: string
   state: string
   assignee: string
   htmlUrl?: string
@@ -208,18 +223,21 @@ export async function fetchRepositories(): Promise<Repository[]> {
   return Array.isArray(json.data) ? json.data : []
 }
 
-export async function fetchPullRequests(): Promise<PullRequest[]> {
-  const json = await api('/pull-requests')
+export async function fetchPullRequests(repoId?: string | number): Promise<PullRequest[]> {
+  const query = repoId ? `?repoId=${encodeURIComponent(repoId)}` : ''
+  const json = await api(`/pull-requests${query}`)
   return Array.isArray(json.data) ? json.data : []
 }
 
-export async function fetchIssues(): Promise<Issue[]> {
-  const json = await api('/issues')
+export async function fetchIssues(repoId?: string | number): Promise<Issue[]> {
+  const query = repoId ? `?repoId=${encodeURIComponent(repoId)}` : ''
+  const json = await api(`/issues${query}`)
   return Array.isArray(json.data) ? json.data : []
 }
 
-export async function fetchAnalytics(): Promise<AnalyticsData> {
-  const json = await api('/analytics')
+export async function fetchAnalytics(repoId?: string | number): Promise<AnalyticsData> {
+  const query = repoId ? `?repoId=${encodeURIComponent(repoId)}` : ''
+  const json = await api(`/analytics${query}`)
   return json.data
 }
 
@@ -261,13 +279,15 @@ export async function runRepoAnalysisPipeline(repoId?: string | number): Promise
   return json.data
 }
 
-export async function fetchDashboard() {
-  const json = await api('/dashboard')
+export async function fetchDashboard(repoId?: string | number) {
+  const query = repoId ? `?repoId=${encodeURIComponent(repoId)}` : ''
+  const json = await api(`/dashboard${query}`)
   return json.data as {
     totalRepositories: number
     activePullRequests: number
     openIssues: number
     recentCommits: CommitItem[]
+    selectedRepository?: Repository | null
   }
 }
 
@@ -276,6 +296,14 @@ export async function registerUser(userData: { name: string; email: string; pass
 }
 
 import { signOutFirebase } from '../lib/firebase'
+
+export function establishUserSession(token: string, user: unknown): void {
+  localStorage.removeItem('syncops_selected_repo_id')
+  queryClient.clear()
+  localStorage.setItem('sycnops_token', token)
+  localStorage.setItem('sycnops_user', JSON.stringify(user ?? null))
+  window.dispatchEvent(new Event('sycnops_user_updated'))
+}
 
 export async function loginUser(credentials: { email: string; password: string }): Promise<AuthResponse> {
   return api('/auth/login', { method: 'POST', body: JSON.stringify(credentials) })
@@ -291,6 +319,8 @@ export async function logoutUser(): Promise<void> {
   localStorage.removeItem('token')
   localStorage.removeItem('sycnops_user')
   localStorage.removeItem('user')
+  localStorage.removeItem('syncops_selected_repo_id')
+  queryClient.clear()
   sessionStorage.removeItem('sycnops_pending_auth_provider')
   if (typeof sessionStorage !== 'undefined') {
     Object.keys(sessionStorage).forEach((k) => {
@@ -373,13 +403,15 @@ export interface CodeFlowOperation {
   nodes: CodeFlowNode[]
 }
 
-export async function fetchCodeFlowOperations(): Promise<CodeFlowOperation[]> {
-  const json = await api('/code-flow/operations')
+export async function fetchCodeFlowOperations(repoId?: string | number): Promise<CodeFlowOperation[]> {
+  const query = repoId ? `?repoId=${encodeURIComponent(repoId)}` : ''
+  const json = await api(`/code-flow/operations${query}`)
   return json.data || []
 }
 
-export async function fetchCodeFlowTrace(operation = 'report-lost-item'): Promise<CodeFlowOperation> {
-  const json = await api(`/code-flow/trace?operation=${encodeURIComponent(operation)}`)
+export async function fetchCodeFlowTrace(operation: string, repoId?: string | number): Promise<CodeFlowOperation> {
+  const query = repoId ? `&repoId=${encodeURIComponent(repoId)}` : ''
+  const json = await api(`/code-flow/trace?operation=${encodeURIComponent(operation)}${query}`)
   return json.data
 }
 
@@ -504,8 +536,9 @@ export async function fetchFileFlowFiles(projectId = 'sycnops'): Promise<FileFlo
   return json.data || []
 }
 
-export async function fetchFileDetails(filePath: string): Promise<FileDetailResponse> {
-  const json = await api(`/file-flow/file-details?path=${encodeURIComponent(filePath)}`)
+export async function fetchFileDetails(filePath: string, projectId?: string): Promise<FileDetailResponse> {
+  const repoParam = projectId ? `&projectId=${encodeURIComponent(projectId)}&repoId=${encodeURIComponent(projectId)}` : ''
+  const json = await api(`/file-flow/file-details?path=${encodeURIComponent(filePath)}${repoParam}`)
   return json.data
 }
 
@@ -613,3 +646,553 @@ export async function rescanTopology(projectId = 'sycnops'): Promise<TopologyDat
   return json.data
 }
 
+// ── Code Quality Interfaces & API Clients (Stage 2B / Stage 3) ───────────────
+
+export type CodeQualitySeverity = 'critical' | 'high' | 'medium' | 'low' | 'informational'
+export type CodeQualityScannerName = 'eslint' | 'ruff' | 'semgrep'
+export type CodeQualityCategory = 'security' | 'reliability' | 'maintainability' | 'readability' | 'performance'
+
+export interface CodeQualityFinding {
+  id: string
+  ruleId: string
+  title: string
+  severity: CodeQualitySeverity
+  message: string
+  filePath: string
+  line: number
+  column: number
+  endLine?: number
+  endColumn?: number
+  scanner: CodeQualityScannerName
+  category: CodeQualityCategory
+  suggestedFix?: string | null
+  codeSnippet?: string | null
+}
+
+export interface CodeQualitySummary {
+  totalFindings: number
+  critical: number
+  high: number
+  medium: number
+  low: number
+  informational: number
+  errors: number
+  warnings: number
+  byCategory: {
+    security: number
+    reliability: number
+    maintainability: number
+    readability: number
+    performance: number
+  }
+  byScanner: {
+    eslint: number
+    ruff: number
+    semgrep: number
+  }
+  byLanguage: Record<string, number>
+  penaltyBreakdown?: Record<string, number>
+}
+
+export interface CodeQualityComparison {
+  previousScanId?: string
+  previousScore?: number
+  scoreDifference: number
+  newFindingsCount: number
+  resolvedFindingsCount: number
+  persistentFindingsCount: number
+  escalatedCount?: number
+  reducedCount?: number
+}
+
+export interface CodeQualityLatestScan {
+  scanId: string
+  repositoryId: string
+  repoName: string
+  status: 'completed' | 'failed' | 'running' | 'queued'
+  qualityScore: number
+  grade: string
+  penaltiesTotal?: number
+  totalFindings: number
+  severityCounts: {
+    critical: number
+    high: number
+    medium: number
+    low: number
+    informational: number
+  }
+  scannerBreakdown: {
+    eslint: number
+    ruff: number
+    semgrep: number
+  }
+  categoryBreakdown: {
+    security: number
+    reliability: number
+    maintainability: number
+    readability: number
+    performance: number
+  }
+  languageBreakdown: Record<string, number>
+  scanDuration: number
+  durationMs: number
+  lastScanTimestamp: string
+  createdAt: string
+  previousScore?: number | null
+  scoreDifference?: number
+  comparison?: CodeQualityComparison | null
+  languagesDetected: string[]
+  scannersExecuted: Record<string, { status: string; durationMs: number; findingsCount: number; error?: string; reason?: string }>
+  scannedFilesCount: number
+  summary: CodeQualitySummary
+}
+
+export interface CodeQualityScanStatus {
+  success: boolean
+  repositoryId: string
+  scanId?: string
+  status: 'idle' | 'queued' | 'running' | 'completed' | 'failed'
+  createdAt?: string
+  startedAt?: string
+  completedAt?: string
+  durationMs?: number
+  qualityScore?: number
+  grade?: string
+  summary?: CodeQualitySummary
+  error?: string
+  message?: string
+}
+
+export interface CodeQualityHistoryItem {
+  scanId: string
+  repositoryId: string
+  userId?: string
+  repoName: string
+  status: string
+  qualityScore: number
+  grade: string
+  penaltiesTotal?: number
+  summary: CodeQualitySummary
+  findingsCount: number
+  languagesDetected?: string[]
+  scannersExecuted?: Record<string, any>
+  scannedFilesCount?: number
+  durationMs: number
+  createdAt: string
+  comparison?: CodeQualityComparison
+}
+
+export interface CodeQualityHistoryResponse {
+  scans: CodeQualityHistoryItem[]
+  pagination: {
+    total: number
+    page: number
+    totalPages: number
+    limit: number
+  }
+}
+
+export interface CodeQualityFullScan extends CodeQualityLatestScan {
+  findings: CodeQualityFinding[]
+}
+
+export async function fetchCodeQualityLatest(repoId: string | number): Promise<CodeQualityLatestScan | null> {
+  try {
+    const json = await api(`/repositories/${encodeURIComponent(repoId)}/code-quality`)
+    return json.data || null
+  } catch (err: any) {
+    if (err.message?.includes('404') || err.message?.toLowerCase().includes('not found')) {
+      return null
+    }
+    throw err
+  }
+}
+
+export async function fetchCodeQualityStatus(repoId: string | number, scanId?: string): Promise<CodeQualityScanStatus> {
+  const query = scanId ? `?scanId=${encodeURIComponent(scanId)}` : ''
+  const json = await api(`/repositories/${encodeURIComponent(repoId)}/code-quality/status${query}`)
+  return json
+}
+
+export async function triggerCodeQualityScan(
+  repoId: string | number,
+  sync = false
+): Promise<{ success: boolean; scanId: string; status: string; statusUrl?: string; qualityScore?: number; grade?: string; summary?: any }> {
+  const query = sync ? '?sync=true' : ''
+  const json = await api(`/repositories/${encodeURIComponent(repoId)}/code-quality/scan${query}`, {
+    method: 'POST'
+  })
+  return json
+}
+
+export async function fetchCodeQualityHistory(
+  repoId: string | number,
+  page = 1,
+  limit = 10
+): Promise<CodeQualityHistoryResponse> {
+  const json = await api(`/repositories/${encodeURIComponent(repoId)}/code-quality/history?page=${page}&limit=${limit}`)
+  return {
+    scans: json.data || [],
+    pagination: json.pagination || { total: 0, page, totalPages: 0, limit }
+  }
+}
+
+export async function fetchCodeQualityScanDetails(repoId: string | number, scanId: string): Promise<CodeQualityFullScan> {
+  const json = await api(`/repositories/${encodeURIComponent(repoId)}/code-quality/scans/${encodeURIComponent(scanId)}`)
+  return json.data
+}
+
+export async function fetchCodeQualityFinding(
+  repoId: string | number,
+  findingId: string,
+  scanId?: string
+): Promise<{ scanId: string; repositoryId: string; finding: CodeQualityFinding }> {
+  const query = scanId ? `?scanId=${encodeURIComponent(scanId)}` : ''
+  const json = await api(`/repositories/${encodeURIComponent(repoId)}/code-quality/findings/${encodeURIComponent(findingId)}${query}`)
+  return json.data
+}
+
+// ── Stage 4: AI Code Quality Intelligence ──────────────────────────────────
+
+export interface AIExplanation {
+  simpleExplanation: string
+  whyItMatters: string
+  rootCause: string
+  howToFix: string
+  suggestedCodeFix?: string | null
+  bestPractices: string[]
+  riskAssessment: string
+  isAIGenerated: boolean
+  disclaimer: string
+  modelUsed?: string
+  fingerprint?: string
+  generatedAt?: string
+}
+
+export interface AIProviderStatus {
+  available: boolean
+  provider: string
+  model: string
+  hasKey: boolean
+}
+
+export async function fetchAIProviderStatus(repoId: string | number): Promise<AIProviderStatus> {
+  const json = await api(`/repositories/${encodeURIComponent(repoId)}/code-quality/ai-status`)
+  return json.data
+}
+
+export async function fetchAIExplanation(
+  repoId: string | number,
+  findingId: string,
+  scanId?: string
+): Promise<AIExplanation | null> {
+  try {
+    const query = scanId ? `?scanId=${encodeURIComponent(scanId)}` : ''
+    const json = await api(`/repositories/${encodeURIComponent(repoId)}/code-quality/findings/${encodeURIComponent(findingId)}/explain${query}`)
+    return json.data || null
+  } catch (err: any) {
+    if (err.message?.includes('404') || err.message?.toLowerCase().includes('no ai explanation')) {
+      return null
+    }
+    throw err
+  }
+}
+
+export async function generateAIExplanation(
+  repoId: string | number,
+  findingId: string,
+  options: { scanId?: string; regenerate?: boolean } = {}
+): Promise<{ cached: boolean; data: AIExplanation }> {
+  const query = options.scanId ? `?scanId=${encodeURIComponent(options.scanId)}` : ''
+  const json = await api(`/repositories/${encodeURIComponent(repoId)}/code-quality/findings/${encodeURIComponent(findingId)}/explain${query}`, {
+    method: 'POST',
+    body: JSON.stringify(options)
+  })
+  return {
+    cached: Boolean(json.cached),
+    data: json.data
+  }
+}
+
+
+
+// ── Stage 5: AI Fix Assistant ──────────────────────────────────────────────
+
+export interface AIPatch {
+  patchId: string
+  userId: string
+  repositoryId: string
+  scanId?: string | null
+  findingId: string
+  filePath: string
+  language: string
+  scanner: string
+  ruleId: string
+  originalContentHash: string
+  explanation: string
+  originalSnippet: string
+  proposedSnippet: string
+  unifiedDiff: string
+  startLine: number
+  endLine: number
+  addedLinesCount: number
+  removedLinesCount: number
+  status: 'proposed' | 'applied' | 'rejected' | 'rolled_back'
+  validationResult?: 'resolved' | 'changed' | 'still_present' | null
+  validationMessage?: string | null
+  scannerExecuted?: string | null
+  createdAt: string
+  updatedAt: string
+  appliedAt?: string | null
+  rolledBackAt?: string | null
+}
+
+export async function fetchAIFix(
+  repoId: string | number,
+  findingId: string,
+  scanId?: string
+): Promise<AIPatch | null> {
+  try {
+    const query = scanId ? `?scanId=${encodeURIComponent(scanId)}` : ''
+    const json = await api(`/repositories/${encodeURIComponent(repoId)}/code-quality/findings/${encodeURIComponent(findingId)}/fix${query}`)
+    return json.data || null
+  } catch (err: any) {
+    if (err.message?.includes('404') || err.message?.toLowerCase().includes('no ai fix')) {
+      return null
+    }
+    throw err
+  }
+}
+
+export async function generateAIFix(
+  repoId: string | number,
+  findingId: string,
+  options: { scanId?: string } = {}
+): Promise<AIPatch> {
+  const query = options.scanId ? `?scanId=${encodeURIComponent(options.scanId)}` : ''
+  const json = await api(`/repositories/${encodeURIComponent(repoId)}/code-quality/findings/${encodeURIComponent(findingId)}/generate-fix${query}`, {
+    method: 'POST',
+    body: JSON.stringify(options)
+  })
+  return json.data
+}
+
+export async function applyAIFix(
+  repoId: string | number,
+  patchId: string,
+  options: { confirmed: boolean; skipValidation?: boolean } = { confirmed: true }
+): Promise<{ success: boolean; data: AIPatch; validationResult?: string; validationMessage?: string }> {
+  const json = await api(`/repositories/${encodeURIComponent(repoId)}/code-quality/patches/${encodeURIComponent(patchId)}/apply`, {
+    method: 'POST',
+    body: JSON.stringify({ ...options, confirmed: true })
+  })
+  return json
+}
+
+export async function rollbackAIFix(
+  repoId: string | number,
+  patchId: string
+): Promise<{ success: boolean; message: string; patch: AIPatch }> {
+  const json = await api(`/repositories/${encodeURIComponent(repoId)}/code-quality/patches/${encodeURIComponent(patchId)}/rollback`, {
+    method: 'POST'
+  })
+  return json
+}
+
+export async function rejectAIFix(
+  repoId: string | number,
+  patchId: string
+): Promise<{ success: boolean; message: string; data: AIPatch }> {
+  const json = await api(`/repositories/${encodeURIComponent(repoId)}/code-quality/patches/${encodeURIComponent(patchId)}/reject`, {
+    method: 'POST'
+  })
+  return json
+}
+
+
+// ── Stage 6: GitHub Integration & AI Fix PR Automation ─────────────────────
+
+export interface SyncOpsPRRecord {
+  id: string
+  prId: string
+  userId: string
+  repositoryId: string
+  repoFullName: string
+  number: number | null
+  title: string
+  description: string
+  headBranch: string
+  baseBranch: string
+  commitSha: string | null
+  htmlUrl: string | null
+  status: 'open' | 'merged' | 'closed' | 'failed'
+  draft: boolean
+  patchIds: string[]
+  affectedFiles: string[]
+  validationSummary: {
+    scannersExecuted: string[]
+    resolvedCount: number
+    remainingCount: number
+    newlyIntroducedCount: number
+    testsExecuted: boolean
+    testsPassed: boolean | null
+  }
+  createdAt: string
+  updatedAt: string
+  mergedAt?: string | null
+  closedAt?: string | null
+  githubSyncedAt?: string | null
+}
+
+export interface PreparePRPayload {
+  patchIds: string[]
+  branchName?: string
+  baseBranch?: string
+  customCommitMessage?: string
+  customTitle?: string
+  customDescription?: string
+}
+
+export interface PreparePRResponse {
+  success: boolean
+  data: {
+    branchName: string
+    baseBranch: string
+    affectedFiles: string[]
+    patches: AIPatch[]
+    proposedCommit: string
+    proposedTitle: string
+    proposedDescription: string
+  }
+  error?: string
+  message?: string
+  modifiedFiles?: string[]
+}
+
+export interface ValidatePRPayload {
+  patchIds: string[]
+  branchName?: string
+  baseBranch?: string
+  runTests?: boolean
+}
+
+export interface ValidatePRResponse {
+  success: boolean
+  data: {
+    branch: string
+    baseBranch: string
+    affectedFiles: string[]
+    appliedPatches: AIPatch[]
+    validation: {
+      passed: boolean
+      passedQuality: boolean
+      passedTests: boolean
+      scannersExecuted: string[]
+      resolvedFindings: any[]
+      remainingFindings: any[]
+      newlyIntroducedFindings: any[]
+      testResults: {
+        executed: boolean
+        passed: boolean
+        output?: string
+        durationMs?: number
+      }
+    }
+  }
+  error?: string
+  message?: string
+}
+
+export interface CreatePRPayload {
+  patchIds: string[]
+  branchName: string
+  baseBranch?: string
+  confirmed: boolean
+  commitMessage?: string
+  title?: string
+  description?: string
+  githubToken?: string
+  overrideValidation?: boolean
+  force?: boolean
+  runTests?: boolean
+  draft?: boolean
+}
+
+export async function preparePullRequest(
+  repoId: string | number,
+  payload: PreparePRPayload
+): Promise<PreparePRResponse> {
+  const json = await api(`/repositories/${encodeURIComponent(repoId)}/pull-requests/prepare`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  })
+  return json
+}
+
+export async function validatePullRequest(
+  repoId: string | number,
+  payload: ValidatePRPayload
+): Promise<ValidatePRResponse> {
+  const json = await api(`/repositories/${encodeURIComponent(repoId)}/pull-requests/validate`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  })
+  return json
+}
+
+export async function createPullRequest(
+  repoId: string | number,
+  payload: CreatePRPayload
+): Promise<{ success: boolean; message: string; data: SyncOpsPRRecord }> {
+  const json = await api(`/repositories/${encodeURIComponent(repoId)}/pull-requests/create`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  })
+  return json
+}
+
+
+export async function fetchRepoPatches(
+  repoId: string | number
+): Promise<AIPatch[]> {
+  const json = await api(`/repositories/${encodeURIComponent(repoId)}/code-quality/patches`)
+  return json.data || []
+}
+
+export async function fetchRepoPullRequests(
+  repoId: string | number
+): Promise<SyncOpsPRRecord[]> {
+  const json = await api(`/repositories/${encodeURIComponent(repoId)}/pull-requests`)
+  return json.data || []
+}
+
+export async function fetchPullRequestDetails(
+  repoId: string | number,
+  prId: string
+): Promise<SyncOpsPRRecord> {
+  const json = await api(`/repositories/${encodeURIComponent(repoId)}/pull-requests/${encodeURIComponent(prId)}`)
+  return json.data
+}
+
+export async function syncPullRequestStatus(
+  repoId: string | number,
+  prId: string,
+  githubToken?: string
+): Promise<{ success: boolean; message: string; data: SyncOpsPRRecord }> {
+  const json = await api(`/repositories/${encodeURIComponent(repoId)}/pull-requests/${encodeURIComponent(prId)}/sync`, {
+    method: 'POST',
+    body: JSON.stringify({ githubToken })
+  })
+  return json
+}
+
+export async function rollbackFixBranch(
+  repoId: string | number,
+  payload: { patchIds: string[]; baseBranch?: string }
+): Promise<{ success: boolean; message: string }> {
+  const json = await api(`/repositories/${encodeURIComponent(repoId)}/pull-requests/rollback`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  })
+  return json
+}

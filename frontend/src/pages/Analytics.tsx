@@ -1,9 +1,11 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
 import { TrendingUp, GitCommit, GitPullRequest, CheckCircle } from 'lucide-react'
 import { useAnalyticsQuery } from '@/hooks/useApi'
+import { useRepositoryContext } from '@/context/RepositoryContext'
 
 export default function Analytics() {
-  const { data: analytics, isLoading } = useAnalyticsQuery()
+  const { selectedRepo, selectedRepoId } = useRepositoryContext()
+  const { data: analytics, isLoading } = useAnalyticsQuery(selectedRepoId || undefined)
   const dailyActivity = analytics?.dailyActivity || []
 
   // Custom Dark Tooltip
