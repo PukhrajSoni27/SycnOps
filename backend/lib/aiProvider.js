@@ -178,6 +178,13 @@ Remember: Return valid JSON matching the required schema.`
         throw err
       }
       if (msg.toLowerCase().includes('free tier is not available') || msg.toLowerCase().includes('set up billing')) {
+        if (process.env.ALLOW_AI_FALLBACK !== 'false') {
+          console.warn('ℹ️ Gemini API free tier requires billing for this key — using contextual remediation engine.')
+          return {
+            __isFallback: true,
+            fallbackData: generateContextualFallback(finding, context, 'SyncOps Remediation Engine (AI Studio key requires billing)')
+          }
+        }
         const err = new Error('The Gemini API free tier is not available for this project. Please set up billing at aistudio.google.com/billing OR create an API key in a new project in Google AI Studio.')
         err.code = 'BILLING_REQUIRED'
         err.status = 403
@@ -214,6 +221,10 @@ Remember: Return valid JSON matching the required schema.`
     clearTimeout(timerId)
   }
 
+  if (rawResponse?.__isFallback) {
+    return rawResponse.fallbackData
+  }
+
   // 5. Parse and validate JSON response
   const rawText = (rawResponse?.text || '').trim()
   if (!rawText) {
@@ -228,7 +239,7 @@ Remember: Return valid JSON matching the required schema.`
     // Strip optional markdown fencing if the model added it despite instructions
     const cleanText = rawText.replace(/^```json\s*/i, '').replace(/```$/i, '').trim()
     parsed = JSON.parse(cleanText)
-  } catch (parseErr) {
+  } catch (_parseErr) {
     const err = new Error('Failed to parse AI provider JSON response')
     err.code = 'PARSE_ERROR'
     err.status = 502
@@ -237,6 +248,66 @@ Remember: Return valid JSON matching the required schema.`
   }
 
   return formatAIResponse(parsed, finding, context, model)
+}
+
+/**
+ * Generates an accurate, high-fidelity contextual explanation for code quality findings.
+ * Used when the Gemini API quota/billing limit is reached, ensuring developers always receive actionable guidance.
+ */
+export function generateContextualFallback(finding = {}, context = {}, modelNotice = 'SyncOps Remediation Engine') {
+  const rule = String(finding.ruleId || '').toLowerCase()
+  const msg = String(finding.message || '').trim()
+  const snippet = String(finding.codeSnippet || '').trim()
+  const file = finding.filePath || 'source file'
+  const line = finding.line || 1
+
+  let simpleExplanation = ''
+  let whyItMatters = ''
+  let rootCause = ''
+  let howToFix = ''
+  let suggestedCodeFix = null
+  let bestPractices = []
+  let riskAssessment = 'Moderate'
+
+  if (rule.includes('unused-vars') || msg.includes('defined but never used') || msg.includes('never read')) {
+    simpleExplanation = `An identifier is declared at line ${line} in ${file}, but is never read or called anywhere in its scope.`
+    whyItMatters = 'Unused variables consume memory, clutter code readability, and frequently indicate dead code or an unfinished feature refactor.'
+    rootCause = 'The variable or parameter is allocated on the scope but has zero read references across the AST.'
+    howToFix = '1. Remove the unused variable if it is not required.\n2. If it is an unused callback parameter required by a signature, prefix it with an underscore (e.g. `_err` or `_req`).'
+    bestPractices = ['TypeScript Clean Code Standards', 'ESLint: no-unused-vars guidelines']
+    riskAssessment = 'Low (code hygiene and maintainability issue, does not directly cause runtime exceptions).'
+
+    if (snippet && msg.match(/['"](\w+)['"]/)) {
+      const varName = msg.match(/['"](\w+)['"]/)[1]
+      suggestedCodeFix = snippet.replace(new RegExp(`\\b${varName}\\b`), `_${varName}`)
+    }
+  } else if (rule.includes('spawn') || rule.includes('shell-true') || msg.includes('spawn')) {
+    simpleExplanation = 'The process execution method is being called with `shell: true`, which runs input through the system command shell.'
+    whyItMatters = 'Allows critical command injection vulnerabilities (CWE-78 / OWASP A03). If any variable passed to the command contains user input, attackers can execute arbitrary operating system commands.'
+    rootCause = 'Invoking child_process.spawn() or exec() with shell execution enabled evaluates arguments through cmd.exe or /bin/sh.'
+    howToFix = '1. Set `shell: false` or omit the shell option.\n2. Pass the executable name as the first argument, and arguments as an array of strings in the second argument.\n3. Validate all arguments against strict allowlists.'
+    suggestedCodeFix = snippet ? snippet.replace(/shell:\s*true/g, 'shell: false') : null
+    bestPractices = ['OWASP Top 10 A03: Injection', 'CWE-78: OS Command Injection Prevention', 'Node.js Security Best Practices']
+    riskAssessment = 'Critical (High exploitability with direct server takeover potential if input is untrusted).'
+  } else {
+    simpleExplanation = msg || `Static code analysis rule '${finding.ruleId}' was triggered in ${file}.`
+    whyItMatters = `Violations of rule ${finding.ruleId} impact repository ${finding.category || 'quality'} and may lead to unexpected runtime bugs or maintenance overhead.`
+    rootCause = `The pattern detected at line ${line} does not comply with the repository's configured ${finding.scanner || 'linter'} standards.`
+    howToFix = finding.suggestedFix || `Review the code at line ${line} in ${file} and align with standard ${context.language || 'development'} best practices.`
+    suggestedCodeFix = finding.suggestedFix || null
+    bestPractices = [`Official ${finding.scanner?.toUpperCase() || 'Linter'} Rule Documentation (${finding.ruleId})`]
+    riskAssessment = `${finding.severity?.toUpperCase() || 'Moderate'} risk categorized under ${finding.category || 'Quality'}.`
+  }
+
+  return formatAIResponse({
+    simpleExplanation,
+    whyItMatters,
+    rootCause,
+    howToFix,
+    suggestedCodeFix,
+    bestPractices,
+    riskAssessment
+  }, finding, context, modelNotice)
 }
 
 /**
