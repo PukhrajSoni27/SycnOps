@@ -51,6 +51,10 @@ function formatAuthError(err: any): string {
   const msg = err.message || ''
   const hostname = typeof window !== 'undefined' ? window.location.hostname : 'this domain'
 
+  if (msg.includes('NetworkError') || msg.toLowerCase().includes('failed to fetch')) {
+    return 'Browser privacy protection or an ad-blocker blocked the Google Auth request. If using Firefox or Brave, click the Shield icon 🛡️ in the address bar to turn off Tracking Protection for localhost, or click "Redirect" mode above, or use Email sign-in below.'
+  }
+
   if (msg.includes('missing initial state') || code === 'auth/missing-initial-state') {
     return 'Browser storage partitioning blocked the OAuth redirect state. Switch to "Popup" mode above to sign in without redirect storage loss.'
   }
