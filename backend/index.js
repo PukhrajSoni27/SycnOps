@@ -182,25 +182,17 @@ if (!process.env.JWT_SECRET) console.warn('JWT_SECRET not set — using an ephem
 
 
 app.use(cors({
-
-  origin: [
-
-    'http://localhost:3000',
-
-    'http://127.0.0.1:3000',
-
-    'http://localhost:5173',
-
-    'http://127.0.0.1:5173',
-
-    'http://localhost:5174',
-
-    'http://127.0.0.1:5174',
-
-  ],
-
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, curl, or same-origin)
+    if (!origin) return callback(null, true)
+    // Allow any localhost / 127.0.0.1 port (3000, 3001, 5173, etc.)
+    if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      return callback(null, true)
+    }
+    // Allow default development origins
+    callback(null, true)
+  },
   credentials: true
-
 }))
 
 app.use(express.json())
