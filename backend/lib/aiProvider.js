@@ -177,7 +177,13 @@ Remember: Return valid JSON matching the required schema.`
         err.status = 429
         throw err
       }
-      if (msg.includes('401') || msg.includes('403') || msg.toLowerCase().includes('api key')) {
+      if (msg.toLowerCase().includes('free tier is not available') || msg.toLowerCase().includes('set up billing')) {
+        const err = new Error('The Gemini API free tier is not available for this project. Please set up billing at aistudio.google.com/billing OR create an API key in a new project in Google AI Studio.')
+        err.code = 'BILLING_REQUIRED'
+        err.status = 403
+        throw err
+      }
+      if (msg.includes('401') || msg.toLowerCase().includes('api key not valid') || msg.toLowerCase().includes('api_key_invalid')) {
         const err = new Error('Gemini API key is invalid or unauthorized. Please verify GEMINI_API_KEY.')
         err.code = 'INVALID_API_KEY'
         err.status = 401
