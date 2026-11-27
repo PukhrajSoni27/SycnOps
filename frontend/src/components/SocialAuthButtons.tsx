@@ -209,6 +209,30 @@ export default function SocialAuthButtons({ loading, onStart, onDone, onError, o
     }
   }, [])
 
+  // ── Instant Developer Login (bypasses browser tracking/popup issues in local dev) ──
+  const handleDevLogin = async (provider: 'google' | 'github') => {
+    if (popupTimerRef.current) clearTimeout(popupTimerRef.current)
+    onError('')
+    setActiveProvider(provider)
+    onStart()
+    try {
+      const res = await socialLogin({
+        provider,
+        idToken: `dev-${provider}-token`
+      })
+      if (res.token) {
+        onSuccess(res.token, res.user)
+      } else {
+        onError(res.message || 'Developer sign-in failed.')
+      }
+    } catch (err: any) {
+      onError(err.message || 'Developer sign-in failed.')
+    } finally {
+      onDone()
+      setActiveProvider(null)
+    }
+  }
+
   // ── Unified Sign-In: initiates signInWithPopup or signInWithRedirect ────────
   const handleSignIn = async (provider: 'google' | 'github', forceMethod?: 'popup' | 'redirect') => {
     if (!auth) {
@@ -345,22 +369,41 @@ export default function SocialAuthButtons({ loading, onStart, onDone, onError, o
             color: '#93c5fd'
           }}>
             <span>Waiting for {activeProvider === 'google' ? 'Google' : 'GitHub'} window...</span>
-            <button
-              type="button"
-              onClick={handleCancel}
-              style={{
-                background: 'rgba(239, 68, 68, 0.2)',
-                border: '1px solid rgba(239, 68, 68, 0.4)',
-                color: '#f87171',
-                padding: '2px 8px',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '11px',
-                fontFamily: 'var(--font-mono)'
-              }}
-            >
-              Cancel
-            </button>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button
+                type="button"
+                onClick={() => handleDevLogin(activeProvider)}
+                title="Bypass popup/network delay and sign in immediately"
+                style={{
+                  background: 'rgba(16, 185, 129, 0.2)',
+                  border: '1px solid rgba(16, 185, 129, 0.4)',
+                  color: '#34d399',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  fontFamily: 'var(--font-mono)'
+                }}
+              >
+                ⚡ Instant Login
+              </button>
+              <button
+                type="button"
+                onClick={handleCancel}
+                style={{
+                  background: 'rgba(239, 68, 68, 0.2)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  color: '#f87171',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  fontFamily: 'var(--font-mono)'
+                }}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         )}
         {/* Google */}
@@ -429,6 +472,28 @@ export default function SocialAuthButtons({ loading, onStart, onDone, onError, o
             ? (authMethod === 'redirect' ? 'Redirecting to GitHub...' : 'Signing in with GitHub...')
             : 'Continue with GitHub'}
         </button>
+
+        {isLocalhost && (
+          <div style={{ textAlign: 'center', marginTop: '-4px' }}>
+            <button
+              type="button"
+              onClick={() => handleDevLogin('google')}
+              disabled={loading}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#10b981',
+                fontSize: '11px',
+                fontFamily: 'var(--font-mono)',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                textDecoration: 'underline',
+                opacity: 0.9
+              }}
+            >
+              ⚡ Instant Google Sign-in (Local Dev Bypass)
+            </button>
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', margin: '8px 0 24px', gap: '12px' }}>

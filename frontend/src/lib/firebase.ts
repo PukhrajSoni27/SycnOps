@@ -14,9 +14,19 @@ import {
 } from 'firebase/auth'
 import { getFirestore, type Firestore } from 'firebase/firestore'
 
+const isLocalhostHost = typeof window !== 'undefined' && (
+  window.location.hostname === 'localhost' ||
+  window.location.hostname === '127.0.0.1' ||
+  window.location.hostname === '[::1]'
+)
+
 export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'sycnops-cd9af.firebaseapp.com',
+  // On localhost, using window.location.host routes auth through Vite's /__/auth proxy,
+  // avoiding cross-origin storage partitioning, popup hangs, and Firefox tracking protection NetworkErrors.
+  authDomain: isLocalhostHost
+    ? window.location.host
+    : (import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'sycnops-cd9af.firebaseapp.com'),
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'sycnops-cd9af',
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
