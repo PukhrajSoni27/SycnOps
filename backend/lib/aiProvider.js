@@ -154,7 +154,7 @@ ${untrustedBlock}
 
 Remember: Return valid JSON matching the required schema.`
 
-  // 4. Initialize client and execute with timeout
+  // 4. Initialize client and execute with timeout geminni api call
   const ai = new GoogleGenAI({ apiKey })
 
   const callPromise = (async () => {

@@ -258,9 +258,9 @@ function isDemoRepo(repo) {
   const name = String(repo.name || '').toLowerCase()
   const full = String(repo.fullName || '').toLowerCase()
   return name === 'campus-lost-found' ||
-         name === 'sycnops-core' ||
-         full === 'studio/campus-lost-found' ||
-         full === 'studio/sycnops-core'
+    name === 'sycnops-core' ||
+    full === 'studio/campus-lost-found' ||
+    full === 'studio/sycnops-core'
 }
 
 function loadCachedWorkspaces() {
@@ -1370,16 +1370,16 @@ app.post('/api/repositories/import', requireAuth, async (req, res) => {
           const db = getDB()
 
           if (db) {
-          const safeRepos = ws.repos.map((r) => {
-            const copy = { ...r }
-            if (copy.githubToken) {
-              copy.encryptedGithubToken = encryptToken(copy.githubToken)
-              delete copy.githubToken
-            }
-            return copy
-          })
-          await db.collection('workspaces').doc(String(req.auth.id)).set({ repos: safeRepos, initialized: true }, { merge: true }).catch(() => { })
-        }
+            const safeRepos = ws.repos.map((r) => {
+              const copy = { ...r }
+              if (copy.githubToken) {
+                copy.encryptedGithubToken = encryptToken(copy.githubToken)
+                delete copy.githubToken
+              }
+              return copy
+            })
+            await db.collection('workspaces').doc(String(req.auth.id)).set({ repos: safeRepos, initialized: true }, { merge: true }).catch(() => { })
+          }
 
         } catch (e) { }
 
@@ -1606,7 +1606,7 @@ app.get('/api/repositories/:id/details', requireAuth, async (req, res) => {
     if (data && data.repo) data.repo = sanitizeRepoForClient(data.repo)
 
     return res.json({ success: true, data })
-    
+
 
   } catch (err) {
 
@@ -2916,7 +2916,7 @@ function resolveAuthorizedRepoPath(repo) {
 
       }
 
-    } catch (_) {}
+    } catch (_) { }
 
   }
 
@@ -3141,70 +3141,70 @@ app.post('/api/repositories/:id/code-quality/scan', requireAuth, async (req, res
 
 
 
-    // Execute background analysis asynchronously
+      // Execute background analysis asynchronously
 
-    ;(async () => {
+      ; (async () => {
 
-      job.status = 'running'
+        job.status = 'running'
 
-      job.startedAt = new Date().toISOString()
+        job.startedAt = new Date().toISOString()
 
-      const jobStart = Date.now()
-
-
-
-      try {
-
-        const scanResult = await executeCodeQualityScan(resolvedPath, {
-          repoId: repoIdStr,
-          incremental: req.query.incremental === 'true' || req.body?.incremental === true
-        })
-
-        const saved = await saveScan({
-
-          ...scanResult,
-
-          repositoryId: repoIdStr,
-
-          userId: String(job.userId),
-
-          repoName: repo.name,
-
-          repoFullName: repo.fullName
-
-        })
+        const jobStart = Date.now()
 
 
 
-        job.status = 'completed'
+        try {
 
-        job.completedAt = new Date().toISOString()
+          const scanResult = await executeCodeQualityScan(resolvedPath, {
+            repoId: repoIdStr,
+            incremental: req.query.incremental === 'true' || req.body?.incremental === true
+          })
 
-        job.durationMs = Date.now() - jobStart
+          const saved = await saveScan({
 
-        job.scanId = saved.scanId
+            ...scanResult,
 
-        job.qualityScore = saved.qualityScore
+            repositoryId: repoIdStr,
 
-        job.grade = saved.grade
+            userId: String(job.userId),
 
-        job.summary = saved.summary
+            repoName: repo.name,
 
-        codeQualityJobsById.set(saved.scanId, job)
+            repoFullName: repo.fullName
 
-      } catch (err) {
+          })
 
-        job.status = 'failed'
 
-        job.completedAt = new Date().toISOString()
 
-        job.durationMs = Date.now() - jobStart
+          job.status = 'completed'
 
-        job.error = err.message
+          job.completedAt = new Date().toISOString()
 
-      }
+          job.durationMs = Date.now() - jobStart
 
-    })()
+          job.scanId = saved.scanId
+
+          job.qualityScore = saved.qualityScore
+
+          job.grade = saved.grade
+
+          job.summary = saved.summary
+
+          codeQualityJobsById.set(saved.scanId, job)
+
+        } catch (err) {
+
+          job.status = 'failed'
+
+          job.completedAt = new Date().toISOString()
+
+          job.durationMs = Date.now() - jobStart
+
+          job.error = err.message
+
+        }
+
+      })()
 
   } catch (err) {
 
